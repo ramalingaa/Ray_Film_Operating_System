@@ -1,6 +1,7 @@
 import { Cite, Section, SeverityBadge, Stat } from "@/components/run-bits";
 import { formatEighths } from "@/lib/intake/pages";
 import type { LocationsReport } from "@/lib/stages/locations";
+import { SetBars } from "@/components/visuals/production-charts";
 
 export function LocationsReportView({ r }: { r: LocationsReport }) {
   const sp = r.split;
@@ -12,6 +13,16 @@ export function LocationsReportView({ r }: { r: LocationsReport }) {
         <Stat label="Day / night" value={`${formatEighths(sp.dayEighths)} / ${formatEighths(sp.nightEighths)}`} hint="pages" />
         <Stat label="On the location sheet" value={r.sheetGiven ? `${r.sets.filter((s) => s.onSheet).length} of ${r.sets.length}` : "no sheet"} />
       </div>
+
+      <Section title="Pages per set" note="Largest first, split by day and night.">
+        <SetBars
+          sets={r.sets.map((s) => ({
+            name: s.name,
+            day: s.dayEighths ?? (s.times.some((t) => /NIGHT/i.test(t)) ? 0 : s.eighths),
+            night: s.nightEighths ?? (s.times.some((t) => /NIGHT/i.test(t)) ? s.eighths : 0),
+          }))}
+        />
+      </Section>
 
       <Section title={`Flags (${r.flags.length})`}>
         {r.flags.length === 0 ? (

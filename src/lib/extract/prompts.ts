@@ -82,11 +82,11 @@ export function adaptUserPrompt(title: string, story: string): string {
 // ---- Story analysis ----------------------------------------------------------------
 
 /** Bump whenever the story-analysis prompt changes: it is part of the story cache key. */
-export const STORY_PROMPT_VERSION = "story-v1";
+export const STORY_PROMPT_VERSION = "story-v2";
 
 export const STORY_SYSTEM = `You are a story analyst giving a producer an honest structural read of a screenplay, using Blake Snyder's 15-beat structure as a reference, not a rule.
 
-You see the whole screenplay with line numbers. Report:
+You see the whole screenplay with line numbers. Each scene heading is marked in the margin with its scene number, e.g. "[scene 6]"; use exactly those numbers for scene_number, and cite a line from inside that scene. Report:
 1. Logline elements: the protagonist, what they want (goal), what happens if they fail (stakes), and what stands in the way. Use null for anything the script does not make clear, and list it in "missing".
 2. Beats: for each of the 15 beats, the scene that delivers it, or scene_number null if no scene does. Do not force a beat onto a scene that does not deliver it.
 3. Scene cards: for every scene, its purpose in the story, the conflict in it, the value or situation at the start and at the end, and whether the scene turns (the situation is meaningfully different at the end). A scene that only repeats information or mood does not turn.
@@ -101,7 +101,7 @@ export function storyUserPrompt(title: string, numberedScript: string): string {
 // ---- Story development (chapter 1): testing a prose story ---------------------------
 
 /** Bump whenever the story-development prompt changes: it is part of its cache key. */
-export const STORY_DRAFT_PROMPT_VERSION = "story-draft-v1";
+export const STORY_DRAFT_PROMPT_VERSION = "story-draft-v2";
 
 export const STORY_DRAFT_SYSTEM = `You are a development executive reading a story, treatment or logline before anyone writes a screenplay. Give the writer an honest, specific and kind development read, using Blake Snyder's 15 beats as a reference, not a rule.
 
@@ -111,6 +111,8 @@ You see the story with line numbers. Report:
 3. Setups: things the story plants (objects, promises, secrets, skills) and whether they pay off.
 4. Strengths: what already works, with citations.
 5. Questions: the questions a producer would ask the writer before a screenplay is written (what is unclear, unmotivated, or missing), each with why it matters.
+6. Characters: everyone who appears or matters to the plot, including the dead or absent, with their role (protagonist, antagonist, supporting, minor), what they want (null if the story does not say), one line describing them, and their age if the story states it.
+7. Relationships: how pairs of characters are connected (family, work, conflict, help), described in a few words, each cited.
 
 Every citation needs source_line (the number in the left margin) and source_snippet (exact words copied from that line, at most 25 words). Use null for both when nothing in the text applies. Do not rewrite the story.`;
 

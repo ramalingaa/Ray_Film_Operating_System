@@ -4,6 +4,8 @@
  * it is on the location sheet. Code only.
  */
 import { loadState } from "../checks/state";
+import type { ContinuityReport } from "./continuity";
+import { stageReport } from "./reports";
 import { parseFountain } from "../fountain";
 import { formatEighths, sceneEighths } from "../intake/pages";
 import { isExterior, isNight } from "../breakdown/rules";
@@ -15,6 +17,8 @@ export interface LocationSet {
   times: string[];
   scenes: string[];
   eighths: number;
+  dayEighths?: number;
+  nightEighths?: number;
   pages: string;
   /** null when no location sheet was given. */
   onSheet: boolean | null;
@@ -45,7 +49,9 @@ export const locationsStage: StageDef<LocationsReport> = {
   summary: "Every set with its interior/exterior and day/night needs, pages, sheet coverage, and one-off company moves.",
   async step({ ctx, run }) {
     if (!run.scriptText || !run.scriptDocId) throw new Error("the continuity stage has not stored the script yet");
-    const state = await loadState(ctx.db, run.scriptDocId);
+    const continuity = await stageReport<ContinuityReport>(ctx.db, run.id, "continuity");
+    // Only this production's sheets; [] when it has none (older reports fall back to the latest).
+    const state = await loadState(ctx.db, run.scriptDocId, continuity.sheetDocIds);
     const parsed = parseFountain(run.scriptText);
     const docName = state.facts.find((f) => f.sourceDocId === run.scriptDocId)?.sourceDocName ?? run.sourceName;
     const info = new Map(state.scenes.map((s) => [s.number, s]));
@@ -70,6 +76,8 @@ export const locationsStage: StageDef<LocationsReport> = {
           times: [],
           scenes: [],
           eighths: 0,
+          dayEighths: 0,
+          nightEighths: 0,
           pages: "",
           onSheet: sheetGiven ? !!sheet : null,
           sheetCite: sheet ? { docName: sheet.sourceDocName, line: sheet.sourceLine, snippet: sheet.sourceSnippet } : undefined,
@@ -81,6 +89,8 @@ export const locationsStage: StageDef<LocationsReport> = {
       if (!set.times.includes(p.timeOfDay)) set.times.push(p.timeOfDay);
       set.scenes.push(p.number);
       set.eighths += eighths;
+      if (isNight(p.timeOfDay)) set.nightEighths = (set.nightEighths ?? 0) + eighths;
+      else set.dayEighths = (set.dayEighths ?? 0) + eighths;
       if (isExterior(p.intExt)) split.extEighths += eighths;
       else split.intEighths += eighths;
       if (isNight(p.timeOfDay)) split.nightEighths += eighths;

@@ -28,6 +28,7 @@ import type { StoryTestReport } from "@/lib/stages/story-test";
 import { loadReview } from "@/lib/ui/queries";
 import { loadRun, openHighCount, type ChapterView, type RunView, type StageView } from "@/lib/ui/runs";
 import { summaryOf, TEST_LABEL } from "@/lib/ui/summaries";
+import { presenceFor } from "@/lib/ui/visuals";
 
 /** Each step a production takes is a server action on this page; it saves progress well before this limit. */
 export const maxDuration = 300;
@@ -439,7 +440,7 @@ async function StageReport({ stage, run, db }: { stage: StageView; run: RunView;
     case "story_test":
       return <StoryTestReportView r={stage.report as StoryTestReport | Skipped} />;
     case "intake":
-      return <IntakeReportView r={stage.report as IntakeReport} scriptText={run.scriptText} />;
+      return <IntakeReportView r={stage.report as IntakeReport} scriptText={run.scriptText} presence={run.scriptDocId ? await presenceFor(db, run.scriptDocId) : undefined} />;
     case "story":
       return <StoryReportView r={stage.report as StoryReport | Skipped} />;
     case "continuity": {

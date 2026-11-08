@@ -55,7 +55,7 @@ export const sceneExtractor: Agent<SceneExtractionInput, SceneExtractionOutput> 
       user: extractionUserPrompt({ title, sceneNumber: scene.number, summary, numberedScene: numberedSceneText(scene) }),
       schema: SceneExtractionSchema,
       schemaName: "scene_extraction",
-      maxTokens: 8000,
+      maxTokens: 4000,
     });
     for (const a of result.attempts.filter((a) => a.outcome !== "ok")) {
       await ctx.ledger.issue("scene-extractor", "warning", `scene ${scene.number}`, `${a.model}: ${a.outcome} (${a.message})`);

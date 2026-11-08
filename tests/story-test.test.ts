@@ -26,6 +26,14 @@ const draft = (over: Partial<StoryDraft> = {}): StoryDraft => ({
   setups: [{ description: "The brass key", paid_off: false, source_line: 3, source_snippet: "a brass key" }],
   strengths: [{ point: "A clear image to open on.", source_line: 1, source_snippet: "in the rain" }],
   questions: [{ question: "Why now?", why: "The catalyst needs urgency." }],
+  characters: [
+    { name: "Maya", role: "protagonist", want: "the ledger", description: "Keeper's daughter", age: null, source_line: 1, source_snippet: "Maya waits on the pier" },
+    { name: "Daniel", role: "supporting", want: null, description: "Her brother", age: null, source_line: 3, source_snippet: "Her brother Daniel" },
+  ],
+  relationships: [
+    { a: "Maya", b: "Daniel", relation: "siblings", source_line: 3, source_snippet: "Her brother Daniel gives her a brass key." },
+    { a: "Maya", b: "Voss", relation: "enemies", source_line: 5, source_snippet: "She decides to find the ledger herself." },
+  ],
   ...over,
 });
 
@@ -35,7 +43,16 @@ describe("story test report", () => {
   it("keeps verified citations and drops invented ones", () => {
     expect(r.beats.find((b) => b.id === "catalyst")).toMatchObject({ present: true, cite: { line: 3 } });
     expect(r.beats.find((b) => b.id === "midpoint")).toMatchObject({ present: false, timing: "missing" });
-    expect(r.dropped).toEqual(["Midpoint: the quoted words were not found in the story"]);
+    expect(r.dropped).toContain("Midpoint: the quoted words were not found in the story");
+  });
+
+  it("keeps characters, and only relationships between known characters with a real quote", () => {
+    expect(r.characters.map((c) => [c.name, c.role, !!c.cite])).toEqual([
+      ["Maya", "protagonist", true],
+      ["Daniel", "supporting", true],
+    ]);
+    expect(r.relationships).toEqual([{ a: "Maya", b: "Daniel", relation: "siblings", cite: expect.objectContaining({ line: 3 }) }]);
+    expect(r.dropped).toContain("relationship Maya–Voss: names a character not in the cast list");
   });
 
   it("measures where beats fall in the story", () => {

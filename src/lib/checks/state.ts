@@ -13,9 +13,13 @@ async function latestSheetIds(db: Db): Promise<number[]> {
   return ids;
 }
 
-/** Load the snapshot that checks run on: one script version plus the latest sheets. */
-export async function loadState(db: Db, docId: number): Promise<BibleState> {
-  const sheetIds = await latestSheetIds(db);
+/**
+ * Load the snapshot that checks run on: one script version plus its sheets.
+ * Pass `sheetIds` for a production (its own sheets, possibly none); without
+ * it, the latest sheets in the database are used (CLI and eval).
+ */
+export async function loadState(db: Db, docId: number, sheetIds?: number[]): Promise<BibleState> {
+  sheetIds ??= await latestSheetIds(db);
   const docNames = new Map((await db.select({ id: documents.id, name: documents.name }).from(documents)).map((d) => [d.id, d.name]));
 
   const factRows = await db

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AllModelsFailedError, createAdapter, ModelGateway, parseModelSpec, rolesFromEnv } from "@/lib/llm/gateway";
+import { AllModelsFailedError, createAdapter, isTransient, ModelGateway, openRouterReasoning, parseModelSpec, rolesFromEnv } from "@/lib/llm/gateway";
 import { parseStructured } from "@/lib/llm/openai-compatible";
 import { ModelConfigError, ModelOutputError, type ModelAdapter, type StructuredRequest } from "@/lib/llm/types";
 
@@ -68,6 +68,34 @@ describe("ModelGateway", () => {
     const a = scripted("x:a", [new ModelOutputError("bad", ""), new ModelOutputError("still bad", "")]);
     const g = new ModelGateway({ extract: ["x:a"], judge: [] }, () => a);
     await expect(g.generate("extract", req)).rejects.toBeInstanceOf(AllModelsFailedError);
+  });
+});
+
+describe("transient provider errors", () => {
+  it("retries a held-credit error on the same model, but moves on from an exhausted quota", async () => {
+    let calls = 0;
+    const flaky: ModelAdapter = {
+      spec: "x:flaky",
+      async generate<T>(req: StructuredRequest<T>) {
+        calls++;
+        if (calls === 1) throw new Error("402 This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits.");
+        return { data: req.schema.parse({ n: 1 }), model: "x:flaky", usage: {} };
+      },
+    };
+    const gw = new ModelGateway({ extract: ["x:flaky"], judge: [] }, () => flaky, [1]);
+    const r = await gw.generate("extract", { system: "s", user: "u", schema: z.object({ n: z.number() }), schemaName: "n" });
+    expect(r.data).toEqual({ n: 1 });
+    expect(calls).toBe(2);
+    expect(isTransient(new Error("429 Rate limit exceeded: free-models-per-day"))).toBe(false);
+    expect(isTransient(new Error("402 ... You requested up to 16000 tokens, but can only afford 4418"))).toBe(false);
+    expect(isTransient(new Error("503 upstream overloaded"))).toBe(true);
+  });
+});
+
+describe("OpenRouter reasoning", () => {
+  it("asks for no reasoning by default, or the configured effort", () => {
+    expect(openRouterReasoning({})).toEqual({ reasoning: { enabled: false } });
+    expect(openRouterReasoning({ OPENROUTER_REASONING: "low" })).toEqual({ reasoning: { effort: "low" } });
   });
 });
 

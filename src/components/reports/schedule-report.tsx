@@ -1,5 +1,6 @@
 import { Cite, Section, SeverityBadge, Stat } from "@/components/run-bits";
 import type { ScheduleReport } from "@/lib/stages/schedule";
+import { ShootDayStrips } from "@/components/visuals/production-charts";
 
 export function ScheduleReportView({ r }: { r: ScheduleReport }) {
   const dayNumbers = r.days.map((d) => d.day);
@@ -33,6 +34,10 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
             ))}
           </ul>
         )}
+      </Section>
+
+      <Section title="The shoot at a glance" note="One row per shoot day; each block is a scene, coloured by set.">
+        <ShootDayStrips days={r.days} eighthsPerDay={r.eighthsPerDay} />
       </Section>
 
       <Section title="Stripboard (draft)" note="One block per shoot day. Day work first, then night work, grouped by set.">

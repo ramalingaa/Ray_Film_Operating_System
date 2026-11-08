@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { eq } from "drizzle-orm";
 import { isMinor, minorMatcher, statedAges } from "@/lib/breakdown/rules";
+import { isPlaceholder } from "@/lib/pipeline/ingest";
 import { openDb } from "@/lib/db/client";
 import { runStages } from "@/lib/db/schema";
 import { parseFountain } from "@/lib/fountain";
@@ -15,6 +16,7 @@ import { rateCard } from "@/lib/budget/rates";
 import { dayOutOfDays, lightOf, planDays } from "@/lib/schedule/plan";
 import { CLEAN_PLAN, planExtractor } from "./helpers/placeholder-plan";
 import { routerModel } from "./helpers/router-model";
+import { fullStructureRead } from "./helpers/story-fakes";
 
 const script = fs.readFileSync("data/script.fountain", "utf8");
 const sheets = {
@@ -29,12 +31,7 @@ async function runSample(text = script, extraSheets: Partial<typeof sheets> = sh
   const model = routerModel({
     scene_extraction: async (req) => (await plan.generate(req)).data,
     verdict: () => ({ conflict: false, confidence: 0.9, reason: "-" }),
-    story_analysis: () => ({
-      logline: { protagonist: null, goal: null, stakes: null, obstacle: null, one_sentence: "-", missing: [], source_line: 6, source_snippet: "EXT. DOCKS - NIGHT" },
-      beats: [],
-      scenes: [],
-      setups: [],
-    }),
+    story_analysis: fullStructureRead,
   });
   const gateway = new ModelGateway({ extract: ["fake:router"], judge: ["fake:router"] }, () => model);
   const id = await createRun(db, { sourceName: "script.fountain", text, ...extraSheets });
@@ -173,5 +170,41 @@ describe("schedule and budget stages", () => {
     expect(rates).toMatchObject({ crewDay: 1, currency: "INR" });
     expect(overridden).toEqual(["crewDay", "currency"]);
     expect(() => rateCard(false, { BUDGET_RATES: "{nope" })).toThrow(/not valid JSON/);
+  });
+});
+
+describe("fixes from the Lost and Found run", () => {
+  it("reads ages written in prose, not only in the (10) convention", () => {
+    // The exact sentence shape the first run missed: the name follows earlier words in the same paragraph.
+    const scene = parseFountain("INT. OFFICE - NIGHT\n\nJust before midnight, the bell rings. SAMI, a ten-year-old boy in a yellow raincoat, stands at the counter. ELENA, a tired attendant in her forties, looks up.\n").scenes[0];
+    expect(statedAges(scene).map((a) => [a.name, a.age, isMinor(a)])).toEqual([
+      ["SAMI", 10, true],
+      ["ELENA", 40, false],
+    ]);
+  });
+
+  it("drops placeholder values the scene reader emits", () => {
+    expect(isPlaceholder("equipment none")).toBe(true);
+    expect(isPlaceholder("costume ELENA: none")).toBe(true);
+    expect(isPlaceholder("character UNKNOWN")).toBe(true);
+    expect(isPlaceholder("costume ELENA: grey coat")).toBe(false);
+    expect(isPlaceholder("prop red scarf")).toBe(false);
+  });
+
+  it("checks a production only against its own sheets, never another production's", async () => {
+    const db = await openDb(":memory:");
+    const plan = planExtractor(CLEAN_PLAN, script);
+    const model = routerModel({ scene_extraction: async (req) => (await plan.generate(req)).data, verdict: () => ({ conflict: false, confidence: 0.9, reason: "-" }), story_analysis: fullStructureRead });
+    const gateway = new ModelGateway({ extract: ["fake:router"], judge: ["fake:router"] }, () => model);
+    // One production with sheets, then one without.
+    const withSheets = await createRun(db, { sourceName: "script.fountain", text: script, ...sheets });
+    await autopilot(db, withSheets, { gateway, judgeSettings });
+    const other = script.replace("Title: The Keeper's Ledger", "Title: Another Film").replace("INT. POLICE STATION - DAY", "INT. CITY MORGUE - DAY");
+    const without = await createRun(db, { sourceName: "other.fountain", text: other });
+    expect(await autopilot(db, without, { gateway, judgeSettings })).toEqual({ state: "done" });
+    const rows = await db.select().from(runStages).where(eq(runStages.runId, without));
+    const locations = JSON.parse(rows.find((r) => r.stage === "locations")!.reportJson!) as LocationsReport;
+    expect(locations.sheetGiven).toBe(false);
+    expect(locations.flags.some((f) => /location sheet/.test(f.title))).toBe(false);
   });
 });

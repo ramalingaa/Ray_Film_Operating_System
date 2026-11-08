@@ -12,6 +12,8 @@ import { scriptDocName, type StageDef } from "./types";
 
 export interface ContinuityReport {
   docId: number;
+  /** This production's own costume and location sheets (empty when none were given). */
+  sheetDocIds?: number[];
   sceneCount: number;
   extraction: { extracted: number; cached: number; skipped: number; dropped: number; model: boolean };
   findings: { total: number; open: number; bySeverity: Record<"high" | "medium" | "low", number>; byCheck: Record<string, number> };
@@ -42,7 +44,8 @@ export const continuityStage: StageDef<ContinuityReport> = {
       return { done: false, progress: `read ${r.sceneCount - r.deferredScenes} of ${r.sceneCount} scenes`, runPatch: { scriptDocId: r.scriptDocId } };
     }
 
-    const s = await runChecks(ctx.db, r.scriptDocId, { judgeCtx: ctx, judgeSettings, deadline });
+    const sheetDocIds = [r.costumeDocId, r.locationDocId].filter((x): x is number => x != null);
+    const s = await runChecks(ctx.db, r.scriptDocId, { judgeCtx: ctx, judgeSettings, deadline, sheetDocIds });
     if (s.judge.deferred > 0) {
       const judged = s.judge.accepted + s.judge.rejected;
       return { done: false, progress: `judged ${judged} of ${judged + s.judge.deferred} possible conflicts`, runPatch: { scriptDocId: r.scriptDocId } };
@@ -56,6 +59,7 @@ export const continuityStage: StageDef<ContinuityReport> = {
       runPatch: { scriptDocId: r.scriptDocId },
       report: {
         docId: r.scriptDocId,
+        sheetDocIds,
         sceneCount: r.sceneCount,
         extraction: { extracted: r.extractedScenes, cached: r.cachedScenes, skipped: r.skippedScenes, dropped: r.droppedItems, model: !!ctx.gateway },
         findings: { total: s.total, open: s.open, bySeverity, byCheck: s.byCheck },

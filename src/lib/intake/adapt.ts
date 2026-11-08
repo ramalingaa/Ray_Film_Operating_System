@@ -62,7 +62,7 @@ export async function adaptStory(ctx: AgentContext, title: string, story: string
     ctx,
     "extract",
     ADAPT_PROMPT_VERSION,
-    { system: ADAPT_SYSTEM, user: adaptUserPrompt(title, story), schema: AdaptationSchema, schemaName: "scene_outline", maxTokens: 12000 },
+    { system: ADAPT_SYSTEM, user: adaptUserPrompt(title, story), schema: AdaptationSchema, schemaName: "scene_outline", maxTokens: 6000 },
     "adaptation",
   );
   if (r.data.scenes.length === 0) throw new Error("the adaptation agent returned no scenes");

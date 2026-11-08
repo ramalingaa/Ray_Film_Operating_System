@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
-import { buildStoryReport, numberedScript, type StoryAnalysis } from "@/lib/stages/story";
+import { buildStoryReport, numberedScreenplay, numberedScript, type StoryAnalysis } from "@/lib/stages/story";
 import { beatTiming, outOfOrder } from "@/lib/story/beats";
 
 const script = fs.readFileSync("data/script.fountain", "utf8");
@@ -95,6 +95,19 @@ describe("story report", () => {
     expect(r.shortForm).toBe(true); // a 10-scene sample is short-form: beat findings are low
     expect(r.issues.find((i) => i.title === "No scene delivers the Break into Two")?.severity).toBe("low");
     expect(r.issues[0].severity).not.toBe("low"); // most severe first
+  });
+
+  it("does not attach a scene card that quotes a different scene", () => {
+    const shifted = { ...analysis, scenes: analysis.scenes.map((c) => (c.scene_number === "7" ? { ...c, source_line: 95, source_snippet: "The ledger is in the lighthouse." } : c)) };
+    const s = buildStoryReport(shifted, script, "script.fountain", { model: "fake", cacheHit: false });
+    expect(s.scenes.find((c) => c.number === "7")).toBeUndefined();
+    expect(s.dropped).toContain("scene 7 card: it quotes scene 8, so it was not used");
+  });
+
+  it("marks each scene heading with its number for the model", () => {
+    const lines = numberedScreenplay(script).split("\n");
+    expect(lines[5]).toBe("    6 [scene 1]| EXT. DOCKS - NIGHT");
+    expect(lines[7]).toBe("    8| Rain hammers the pier. One lamp post flickers.");
   });
 
   it("numbers every line of the script for the model", () => {

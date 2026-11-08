@@ -248,3 +248,44 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     decision bar. A single light theme (dark variants only under `.dark`).
 64. **Pages scroll as documents** (not inside a fixed-height `<main>`) so
     navigation resets scroll and the back button restores it.
+65. **Whole-document agents are logged like every other agent run.** The
+    story read, adaptation and structure read used to call models without an
+    `agent_runs` record; `cachedGenerate` now records each call (model, cache
+    hit, tokens, failure).
+66. **OpenRouter requests ask for no hidden reasoning by default**
+    (`reasoning: { enabled: false }`, override with `OPENROUTER_REASONING`).
+    Measured: DeepSeek spent 3,874 of 4,000 output tokens reasoning and
+    returned nothing, even at "low" effort. If a provider rejects the field,
+    the request is retried without it. Output caps were cut to what answers
+    need (6,000 for whole-document reads, 4,000 per scene), which also fits
+    accounts near their credit limit.
+67. **Transient provider errors are retried on the same model** (OpenRouter's
+    in-flight credit hold, 502/503/504, dropped connections), twice with a
+    short wait. Daily quotas and empty balances are not retried; they go to
+    the next model.
+68. **Whole-document answers must be complete, not just schema-valid.** The
+    structure read must cover at least 80% of scenes and place five beats; the
+    story read must name a character and find three beats. An incomplete answer
+    is not cached; the model is asked once more with the gap spelled out, then
+    the stage fails. (Seen: a valid but empty structure read accepted as done.)
+69. **Scene numbers are given to the model in the margin** (`[scene 6]`), and
+    a scene card that quotes a different scene is dropped. (Seen: cards
+    shifted by one scene from scene 6 on.)
+70. **A production is checked only against its own sheets.** Checks used the
+    latest sheet in the whole database, so a production without sheets was
+    flagged against another production's location sheet.
+71. **Ages are read from prose too** ("SAMI, a ten-year-old boy", "in her
+    forties"), case-sensitive on the capitalised character name, and a child
+    is flagged in every scene they appear in, not only where the age is
+    stated. (Seen: a 10-year-old at night not flagged.)
+72. **Placeholder values are not facts** ("none", "unknown", "n/a"): such
+    costumes, props, breakdown items, characters and prop holders are dropped
+    and logged, even with a real quote.
+73. **Story beat positions use where the quote sits within its line**, since
+    prose often keeps a whole paragraph on one line; stories under 1,500 words
+    are short-film material and beat notes are low priority.
+74. **Run records (`npm run produce`) hold reports only**, never the script or
+    story text, and stay out of git (`data/runs/`).
+75. **Charts use the validated categorical palette** (not the stage colours,
+    which fail colour-blind separation as a series palette), carry legends and
+    hover titles, and pair every relationship line with a numbered text list.

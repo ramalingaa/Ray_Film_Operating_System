@@ -59,13 +59,39 @@ export interface StatedAge {
  * Ages stated in action lines the screenplay way: "YOUNG MAYA (8)",
  * "INSPECTOR OKAFOR (50s)". Code, not a model, decides who is a minor.
  */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80,
+};
+
+function ageValue(token: string): number | undefined {
+  if (/^\d{1,3}$/.test(token)) return Number(token);
+  const parts = token.toLowerCase().split("-");
+  const total = parts.reduce((n, p) => n + (NUMBER_WORDS[p] ?? NaN), 0);
+  return Number.isFinite(total) ? total : undefined;
+}
+
 export function statedAges(scene: Pick<ParsedScene, "elements">): StatedAge[] {
   const out: StatedAge[] = [];
+  const push = (e: { text: string; line: number }, index: number, name: string, age: number, approximate: boolean, snippet: string) => {
+    const lineOffset = e.text.slice(0, index).split("\n").length - 1;
+    if (!out.some((a) => a.name === name && a.line === e.line + lineOffset)) out.push({ name, age, approximate, line: e.line + lineOffset, snippet });
+  };
   for (const e of scene.elements) {
     if (e.type !== "action") continue;
-    for (const m of e.text.matchAll(/\b([A-Z][A-Z'.-]*(?: [A-Z][A-Z'.-]*)*) \((\d{1,2})(s)?\)/g)) {
-      const lineOffset = e.text.slice(0, m.index).split("\n").length - 1;
-      out.push({ name: m[1], age: Number(m[2]), approximate: !!m[3], line: e.line + lineOffset, snippet: m[0] });
+    // The screenplay convention: "YOUNG MAYA (8)", "INSPECTOR OKAFOR (50s)".
+    for (const m of e.text.matchAll(/\b([A-Z][A-Z'.-]*(?: [A-Z][A-Z'.-]*)*) \((\d{1,2})(s)?\)/g)) push(e, m.index!, m[1], Number(m[2]), !!m[3], m[0]);
+    // Prose: "SAMI, a ten-year-old boy", "KIRAN, 12-year-old".
+    // Case-sensitive on purpose: a character is written in capitals on first appearance.
+    for (const m of e.text.matchAll(/\b([A-Z][A-Z'-]+(?: [A-Z][A-Z'-]+)*),? (?:an? |the )?([a-z]+(?:-[a-z]+)?|\d{1,2})[- ][Yy]ear[- ]old\b/g)) {
+      const age = ageValue(m[2]);
+      if (age != null) push(e, m.index!, m[1], age, false, m[0]);
+    }
+    // Decades in prose: "ELENA, in her forties".
+    for (const m of e.text.matchAll(/\b([A-Z][A-Z'.-]+(?: [A-Z][A-Z'.-]+)*),? [^.]{0,40}?\bin (?:her|his|their) (twenties|thirties|forties|fifties|sixties|seventies|eighties)\b/g)) {
+      const age = NUMBER_WORDS[m[2].replace(/ies$/, "y")]; // forties -> forty
+      if (age != null) push(e, m.index!, m[1], age, true, m[0].slice(0, 120));
     }
   }
   return out;

@@ -77,6 +77,20 @@ export interface StoryReport {
   dropped: string[];
 }
 
+/** The screenplay with line numbers, and each scene heading marked with its scene number, so the model never has to count scenes. */
+export function numberedScreenplay(text: string): string {
+  const parsed = parseFountain(text);
+  const sceneAt = new Map(parsed.scenes.map((s) => [s.startLine, s.number]));
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l, i) => {
+      const n = sceneAt.get(i + 1);
+      return n ? `${String(i + 1).padStart(5)} [scene ${n}]| ${l}` : `${String(i + 1).padStart(5)}| ${l}`;
+    })
+    .join("\n");
+}
+
 export function numberedScript(text: string): string {
   return text
     .replace(/\r\n?/g, "\n")
@@ -133,8 +147,14 @@ export function buildStoryReport(a: StoryAnalysis, scriptText: string, docName: 
   for (const s of parsed.scenes) {
     const card = a.scenes.find((c) => c.scene_number === s.number);
     if (!card) continue;
-    const cite = verify(parsed, docName, s.number, card.source_line, card.source_snippet);
+    let cite = verify(parsed, docName, s.number, card.source_line, card.source_snippet);
     if (!cite) dropped.push(`scene ${s.number} card: the quoted line was not found in the scene`);
+    else if (cite.sceneNumber !== s.number) {
+      // A card that quotes another scene describes that scene, not this one: do not attach it here.
+      dropped.push(`scene ${s.number} card: it quotes scene ${cite.sceneNumber}, so it was not used`);
+      cite = undefined;
+      continue;
+    }
     scenes.push({ number: s.number, heading: s.heading, purpose: card.purpose, conflict: card.conflict, start: card.start_value, end: card.end_value, turns: card.turns, cite });
   }
 
@@ -210,8 +230,17 @@ export const storyStage: StageDef<StoryReport | Skipped> = {
       ctx,
       "extract",
       STORY_PROMPT_VERSION,
-      { system: STORY_SYSTEM, user: storyUserPrompt(run.title, numberedScript(run.scriptText)), schema: StoryAnalysisSchema, schemaName: "story_analysis", maxTokens: 16000 },
+      { system: STORY_SYSTEM, user: storyUserPrompt(run.title, numberedScreenplay(run.scriptText)), schema: StoryAnalysisSchema, schemaName: "story_analysis", maxTokens: 6000 },
       "story-analyst",
+      `run ${run.id}`,
+      (a) => {
+        const scenes = parseFountain(run.scriptText!).scenes.length;
+        const cards = a.scenes.length;
+        const placed = a.beats.filter((b) => b.scene_number).length;
+        if (cards < Math.ceil(scenes * 0.8)) return `scene cards for only ${cards} of ${scenes} scenes (numbered ${parseFountain(run.scriptText!).scenes.map((s) => s.number).join(", ")})`;
+        if (placed < Math.min(5, scenes)) return `only ${placed} of 15 beats placed in a scene`;
+        return null;
+      },
     );
     const report = buildStoryReport(r.data, run.scriptText, run.scriptGenerated ? "generated outline" : run.sourceName, { model: r.model, cacheHit: r.cacheHit });
     for (const d of report.dropped) await ctx.ledger.issue("story-analyst", "warning", `run ${run.id}`, d);

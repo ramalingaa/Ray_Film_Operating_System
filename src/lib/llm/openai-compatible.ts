@@ -13,6 +13,12 @@ export interface OpenAICompatibleOptions {
   jsonMode: JsonMode;
   /** Extra request headers (OpenRouter app attribution). */
   headers?: Record<string, string>;
+  /**
+   * Extra request-body fields, e.g. OpenRouter's `reasoning`. If the server
+   * rejects them (400 naming one of these fields), the request is sent again
+   * without them.
+   */
+  extraBody?: Record<string, unknown>;
 }
 
 /** Strip a ```json fence if a model wrapped its answer in one. */
@@ -57,23 +63,39 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
         ? `${req.system}\n\nRespond with a single JSON object that conforms to this JSON Schema:\n${JSON.stringify(jsonSchema)}`
         : req.system;
 
-    const res = await this.client.chat.completions.create({
+    const body = {
       model: this.opts.model,
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: req.user },
+        { role: "system" as const, content: system },
+        { role: "user" as const, content: req.user },
       ],
       response_format:
         this.opts.jsonMode === "json_schema"
-          ? { type: "json_schema", json_schema: { name: req.schemaName, schema: jsonSchema, strict: false } }
-          : { type: "json_object" },
+          ? { type: "json_schema" as const, json_schema: { name: req.schemaName, schema: jsonSchema, strict: false } }
+          : { type: "json_object" as const },
       max_tokens: req.maxTokens ?? 16000,
-    });
+    };
+    const extra = this.opts.extraBody ?? {};
+    let res;
+    try {
+      res = await this.client.chat.completions.create({ ...body, ...extra } as typeof body);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const keys = Object.keys(extra);
+      if (!keys.length || !/400/.test(msg) || !keys.some((k) => msg.toLowerCase().includes(k))) throw err;
+      res = await this.client.chat.completions.create(body);
+    }
 
     const choice = res.choices[0];
     const text = choice?.message?.content ?? "";
     if (choice?.finish_reason === "length") {
-      throw new ModelOutputError(`${this.spec} hit the token limit before finishing`, text);
+      const reasoning = (res.usage as { completion_tokens_details?: { reasoning_tokens?: number } } | undefined)?.completion_tokens_details?.reasoning_tokens ?? 0;
+      throw new ModelOutputError(
+        reasoning > 0 && reasoning >= (res.usage?.completion_tokens ?? 0) * 0.8
+          ? `${this.spec} spent ${reasoning} of its ${res.usage?.completion_tokens} output tokens reasoning and ran out before answering`
+          : `${this.spec} hit the token limit before finishing`,
+        text,
+      );
     }
     return {
       data: parseStructured(text, req.schema, this.spec),

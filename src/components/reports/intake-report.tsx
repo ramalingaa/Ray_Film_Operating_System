@@ -1,7 +1,8 @@
 import { Section, Stat } from "@/components/run-bits";
 import type { IntakeReport } from "@/lib/stages/intake";
+import { PresenceGrid, SceneTimeline } from "@/components/visuals/production-charts";
 
-export function IntakeReportView({ r, scriptText }: { r: IntakeReport; scriptText: string | null }) {
+export function IntakeReportView({ r, scriptText, presence }: { r: IntakeReport; scriptText: string | null; presence?: { scenes: string[]; rows: { name: string; in: Set<string> }[] } }) {
   return (
     <div>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -28,6 +29,18 @@ export function IntakeReportView({ r, scriptText }: { r: IntakeReport; scriptTex
               <li key={i}>{w}</li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      <Section title="The film, scene by scene" note="Each block is a scene, as wide as its page length.">
+        <SceneTimeline
+          scenes={r.scenes.map((s) => ({ number: s.number, heading: s.heading, eighths: s.eighths, night: /NIGHT/i.test(s.heading), exterior: /^(EXT|INT\.?\/EXT|I\/E)/i.test(s.heading) }))}
+        />
+      </Section>
+
+      {presence && presence.rows.length > 0 && (
+        <Section title="Who is in which scene" note="From the scene read: anyone who speaks, is present, wears or holds something in the scene.">
+          <PresenceGrid scenes={presence.scenes} rows={presence.rows} />
         </Section>
       )}
 

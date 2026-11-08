@@ -1,5 +1,7 @@
 import { StarMark, STAGE_LOOK } from "@/components/journey/stage-look";
 import { Cite, SeverityBadge } from "@/components/run-bits";
+import { BeatArc } from "@/components/visuals/beat-arc";
+import { CharacterMap } from "@/components/visuals/character-map";
 import type { Skipped } from "@/lib/stages/story";
 import type { StoryTestReport } from "@/lib/stages/story-test";
 import { pct } from "@/lib/story/beats";
@@ -43,6 +45,36 @@ export function StoryTestReportView({ r }: { r: StoryTestReport | Skipped }) {
           {r.cacheHit ? " (cached)" : ""} · {r.words.toLocaleString()} words
         </p>
       </section>
+
+      {/* characters */}
+      {(r.characters ?? []).length > 0 && (
+        <section className="card p-7.5">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+            <h3 className="font-display text-[32px] font-semibold">Who is in the story</h3>
+            <span className="text-sm text-fg-2">
+              {r.characters.length} characters · {(r.relationships ?? []).length} relationships
+            </span>
+          </div>
+          <CharacterMap characters={r.characters} relationships={r.relationships ?? []} />
+          <ul className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
+            {r.characters.map((c) => (
+              <li key={c.name} className="rounded-2xl bg-[#F5F1E7] p-4 text-sm">
+                <p className="font-semibold">
+                  {c.name}
+                  {c.age != null && <span className="font-normal text-muted"> · {c.age}</span>}
+                  <span className="ml-2 text-xs font-semibold tracking-wider text-muted uppercase">{c.role}</span>
+                </p>
+                <p className="mt-1 text-fg-2">{c.description}</p>
+                {c.want && (
+                  <p className="mt-1">
+                    <span className="text-muted">Wants:</span> {c.want}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* works / questions */}
       <div className="flex flex-wrap gap-6">
@@ -95,11 +127,18 @@ export function StoryTestReportView({ r }: { r: StoryTestReport | Skipped }) {
             <strong className="text-fg">{present} of 15</strong> are already in the story
           </span>
         </div>
-        <div aria-hidden className="mt-4.5 grid grid-cols-15 gap-1">
-          {r.beats.map((b) => (
-            <span key={b.id} className="h-2.5 rounded-full" style={{ background: b.present ? look.base : "var(--line)" }} />
-          ))}
-        </div>
+        {!r.tooShortToTime && (
+          <div className="mt-5">
+            <BeatArc beats={r.beats} />
+          </div>
+        )}
+        {r.tooShortToTime && (
+          <div aria-hidden className="mt-4.5 grid grid-cols-15 gap-1">
+            {r.beats.map((b) => (
+              <span key={b.id} className="h-2.5 rounded-full" style={{ background: b.present ? look.base : "var(--line)" }} />
+            ))}
+          </div>
+        )}
         <div className="mt-4.5 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5">
           {r.beats.map((b, i) => (
             <div
@@ -125,6 +164,7 @@ export function StoryTestReportView({ r }: { r: StoryTestReport | Skipped }) {
           ))}
         </div>
         {r.tooShortToTime && <p className="mt-3 text-[13px] text-muted">Too short to measure where the beats land; this shows which are there.</p>}
+        {r.shortForm && !r.tooShortToTime && <p className="mt-3 text-[13px] text-muted">This is short-film length, so the 15 beats are a reference, not a requirement: beat notes are marked low.</p>}
       </section>
 
       {/* notes */}

@@ -76,7 +76,20 @@ export function createAdapter(spec: string, env: Env = process.env): ModelAdapte
     baseURL: (def.baseURLEnv && env[def.baseURLEnv]) || def.baseURL,
     jsonMode: def.jsonMode,
     headers: provider === "openrouter" ? { "HTTP-Referer": "https://github.com/reelgraph", "X-Title": "ReelGraph" } : undefined,
+    extraBody: provider === "openrouter" ? openRouterReasoning(env) : undefined,
   });
+}
+
+/**
+ * Extraction and judging are structured tasks that do not need long hidden
+ * reasoning, and reasoning models can spend their whole output budget on it
+ * (seen: 3,874 of 4,000 tokens, no answer). So OpenRouter calls ask for no
+ * reasoning unless OPENROUTER_REASONING is set to low, medium or high.
+ */
+export function openRouterReasoning(env: Env): Record<string, unknown> {
+  const v = env.OPENROUTER_REASONING?.trim().toLowerCase();
+  if (v === "low" || v === "medium" || v === "high") return { reasoning: { effort: v } };
+  return { reasoning: { enabled: false } };
 }
 
 /** Used when MODEL_EXTRACT / MODEL_JUDGE are unset and only an OpenRouter key is present. */
@@ -117,12 +130,37 @@ export class AllModelsFailedError extends Error {
 
 export type AdapterFactory = (spec: string) => ModelAdapter;
 
+/**
+ * Errors worth one more try on the same model: OpenRouter's "retry after
+ * in-flight requests settle" credit hold, gateway timeouts, dropped
+ * connections. A daily quota or an empty balance is not transient: those go
+ * straight to the next model.
+ */
+export function isTransient(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/free-models-per-day|requires more credits|can only afford/i.test(msg)) return false;
+  return /in-flight requests settle|(502|503|504)|ECONNRESET|ETIMEDOUT|socket hang up|overloaded/i.test(msg);
+}
+
+async function withTransientRetry<T>(fn: () => Promise<T>, delaysMs: number[]): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i >= delaysMs.length || !isTransient(err)) throw err;
+      await new Promise((r) => setTimeout(r, delaysMs[i]));
+    }
+  }
+}
+
 export class ModelGateway {
   private readonly adapters = new Map<string, ModelAdapter>();
 
   constructor(
     private readonly roles: Record<Role, string[]>,
     private readonly factory: AdapterFactory = (s) => createAdapter(s),
+    /** Waits before each retry of a transient provider error. */
+    private readonly retryDelaysMs: number[] = [3000, 8000],
   ) {}
 
   static fromEnv(env: Env = process.env): ModelGateway {
@@ -149,7 +187,7 @@ export class ModelGateway {
   async generateWith<T>(spec: string, req: StructuredRequest<T>, attempts: AttemptLog[] = []): Promise<StructuredResult<T>> {
     const adapter = this.adapter(spec);
     try {
-      const r = await adapter.generate(req);
+      const r = await withTransientRetry(() => adapter.generate(req), this.retryDelaysMs);
       attempts.push({ model: spec, outcome: "ok" });
       return r;
     } catch (err) {
@@ -159,7 +197,7 @@ export class ModelGateway {
         ...req,
         user: `${req.user}\n\nYour previous answer was rejected: ${err.message}\nReturn a corrected answer that satisfies the schema exactly.`,
       };
-      const r = await adapter.generate(retry);
+      const r = await withTransientRetry(() => adapter.generate(retry), this.retryDelaysMs);
       attempts.push({ model: spec, outcome: "ok", message: "after validation retry" });
       return r;
     }

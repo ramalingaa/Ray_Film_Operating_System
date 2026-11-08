@@ -106,10 +106,24 @@ function buildSummary(done: { scene: ParsedScene; x?: SceneExtraction }[], dayOf
     .join("\n");
 }
 
+const PLACEHOLDER = /^(none|n\/?a|null|nil|unknown|unnamed|nobody|nothing|no one|-+|\?+)$/i;
+
+/** True when any value in a label like "costume ELENA: none" is a placeholder. */
+export function isPlaceholder(label: string): boolean {
+  // Labels look like "costume ELENA: none", "equipment none", "character UNKNOWN".
+  const rest = label.slice(label.indexOf(" ") + 1);
+  return rest.split(/[:–]/).some((v) => PLACEHOLDER.test(v.trim()));
+}
+
 /** Drop items whose source pointer cannot be verified against the scene text. */
 function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what: string, reason: string) => void): SceneExtraction {
   const keep = <T extends { source_line: number; source_snippet: string }>(items: T[], label: (t: T) => string): T[] =>
     items.flatMap((item) => {
+      // Placeholders ("none", "unknown", "n/a") are not facts, even with a real quote.
+      if (isPlaceholder(label(item))) {
+        onDrop(label(item), "placeholder value, not a fact");
+        return [];
+      }
       const v = verifySource(scene, item.source_line, item.source_snippet);
       if (!v.ok) {
         onDrop(label(item), v.reason);
@@ -129,7 +143,8 @@ function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what:
       ? { ...x.story_day, source_line: day.line, source_snippet: day.snippet }
       : { ...x.story_day, relation: x.story_day.relation === "explicit" ? "unknown" : x.story_day.relation, day: null, source_line: scene.startLine, source_snippet: scene.heading },
     costumes: keep(x.costumes, (c) => `costume ${c.character}: ${c.garment}`),
-    props: keep(x.props, (p) => `prop ${p.name}`),
+    // A placeholder holder ("unknown") means no holder, not a character.
+    props: keep(x.props, (p) => `prop ${p.name}`).map((p) => ({ ...p, holder: p.holder && !PLACEHOLDER.test(p.holder.trim()) ? p.holder : null })),
     knowledge: keep(x.knowledge, (k) => `knowledge ${k.character}: ${k.fact}`),
     relationships: keep(x.relationships, (r) => `relationship ${r.a}–${r.b}`),
     breakdown: keep(x.breakdown, (b) => `${b.category} ${b.item}`),

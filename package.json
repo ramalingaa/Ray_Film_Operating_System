@@ -15,7 +15,8 @@
     "ingest": "tsx scripts/ingest.ts",
     "checks": "tsx scripts/run-checks.ts",
     "eval": "tsx scripts/run-eval.ts",
-    "impact": "tsx scripts/impact.ts"
+    "impact": "tsx scripts/impact.ts",
+    "produce": "tsx scripts/produce.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

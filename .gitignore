@@ -50,3 +50,4 @@ next-env.d.ts
 /data/eval/*.db-*
 /data/pglite/
 /data/eval/pglite/
+/data/runs/

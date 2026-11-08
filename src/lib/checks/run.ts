@@ -19,6 +19,8 @@ export interface RunChecksOptions {
   judgeSettings?: JudgeSettings;
   /** Epoch ms. After this, remaining candidates are left unjudged (counted as deferred); run again to continue. */
   deadline?: number;
+  /** The production's own sheet documents (possibly none). Omitted: the latest sheets in the database. */
+  sheetDocIds?: number[];
 }
 
 export interface CheckRunSummary {
@@ -37,7 +39,7 @@ export interface CheckRunSummary {
  */
 export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = {}): Promise<CheckRunSummary> {
   const checks = opts.checks ?? CHECKS;
-  const state = await loadState(db, docId);
+  const state = await loadState(db, docId, opts.sheetDocIds);
   const drafts: FindingDraft[] = [];
   const failedChecks: CheckRunSummary["failedChecks"] = [];
   const judgeStats = { candidates: 0, accepted: 0, rejected: 0, unjudged: 0, deferred: 0, skipped: false };

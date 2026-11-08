@@ -21,6 +21,7 @@ import type { IntakeReport } from "@/lib/stages/intake";
 import { emptyExtraction } from "./helpers/fake-model";
 import { CLEAN_PLAN, planExtractor } from "./helpers/placeholder-plan";
 import { routerModel } from "./helpers/router-model";
+import { fullStructureRead } from "./helpers/story-fakes";
 
 const script = fs.readFileSync("data/script.fountain", "utf8");
 const judgeSettings = { policy: "primary" as const, threshold: 0.7 };
@@ -32,17 +33,6 @@ async function stages(db: Db, runId: number) {
 }
 const getRun = async (db: Db, id: number) => (await db.select().from(runs).where(eq(runs.id, id)))[0];
 
-/** A minimal screenplay read: no beats or cards, citing the first scene heading. */
-const minimalStory = (req: { user: string }) => {
-  const m = /^\s*(\d+)\| ((?:INT|EXT).*)$/m.exec(req.user)!;
-  return {
-    logline: { protagonist: null, goal: null, stakes: null, obstacle: null, one_sentence: "-", missing: [], source_line: Number(m[1]), source_snippet: m[2] },
-    beats: [],
-    scenes: [],
-    setups: [],
-  };
-};
-
 /** A minimal development read of a prose story, citing its first line. */
 const minimalDraft = (req: { user: string }) => {
   const m = /^\s*1\| (.+)$/m.exec(req.user)!;
@@ -53,6 +43,8 @@ const minimalDraft = (req: { user: string }) => {
     setups: [],
     strengths: [],
     questions: [{ question: "What does Maya want?", why: "Without a goal there is no story." }],
+    characters: [],
+    relationships: [],
   };
 };
 
@@ -70,7 +62,7 @@ const emptyScene = (req: { user: string }) => {
 };
 
 function gatewayFor(handlers: Parameters<typeof routerModel>[0]) {
-  const model = routerModel({ story_analysis: minimalStory, story_draft: minimalDraft, verdict: () => ({ conflict: false, confidence: 0.9, reason: "-" }), ...handlers });
+  const model = routerModel({ story_analysis: fullStructureRead, story_draft: minimalDraft, verdict: () => ({ conflict: false, confidence: 0.9, reason: "-" }), ...handlers });
   return { model, gateway: new ModelGateway({ extract: ["fake:router"], judge: ["fake:router"] }, () => model) };
 }
 
@@ -255,5 +247,24 @@ describe("the runner", () => {
   it("rejects empty input", async () => {
     const db = await openDb(":memory:");
     await expect(createRun(db, { sourceName: "x", text: "   " })).rejects.toThrow(/empty/);
+  });
+});
+
+describe("incomplete model answers", () => {
+  it("asks again when the structure read comes back empty, and fails the stage if it stays empty", async () => {
+    const db = await openDb(":memory:");
+    let empty = 2;
+    const full = fullStructureRead;
+    const { gateway, model } = gatewayFor({
+      scene_extraction: extraction,
+      story_analysis: (req) => (empty-- > 0 ? { ...full(req), scenes: [], beats: [] } : full(req)),
+    });
+    const id = await createRun(db, { sourceName: "script.fountain", text: script });
+    expect(await runToEnd(db, id, { gateway, judgeSettings })).toEqual({ state: "failed", stage: "story" });
+    expect((await stages(db, id)).story.error).toMatch(/incomplete \(scene cards for only 0 of 10 scenes/);
+    expect(model.calls.story_analysis).toBe(2);
+    await retryRun(db, id);
+    expect(await runToEnd(db, id, { gateway, judgeSettings })).toEqual({ state: "review" });
+    expect(JSON.parse((await stages(db, id)).story.reportJson!).scenes).toHaveLength(10);
   });
 });

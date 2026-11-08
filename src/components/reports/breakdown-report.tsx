@@ -1,6 +1,7 @@
 import { Cite, SEVERITY_BAND, SeverityBadge, Stat } from "@/components/run-bits";
 import { formatEighths } from "@/lib/intake/pages";
 import type { BreakdownReport } from "@/lib/stages/breakdown";
+import { BreakdownHeatmap } from "@/components/visuals/production-charts";
 
 const CATEGORY_LABEL: Record<string, string> = {
   extras: "Extras",
@@ -33,6 +34,24 @@ export function BreakdownReportView({ r }: { r: BreakdownReport }) {
         <Stat label="Pages" value={formatEighths(pages)} hint={`about ${Math.max(1, Math.round(pages / 8))} min on screen`} />
       </div>
       {!r.modelRead && <p className="rounded-2xl bg-amber-soft p-4 text-sm text-amber">No model read the scenes, so only cast from dialogue, stated ages and scene headings are broken down.</p>}
+
+      <section className="card p-7.5">
+        <h3 className="font-display text-[32px] font-semibold">Where the work is</h3>
+        <p className="mt-1 mb-4 text-sm text-muted">Tagged items per scene and department. Darker means more to prepare.</p>
+        <BreakdownHeatmap
+          scenes={r.scenes.map((s) => {
+            const counts: Record<string, number> = { cast: s.cast.length, wardrobe: s.wardrobe.length, props: s.props.length };
+            for (const e of s.elements) counts[e.category] = (counts[e.category] ?? 0) + 1;
+            return { number: s.number, counts };
+          })}
+          categories={[
+            { id: "cast", label: "Cast" },
+            { id: "wardrobe", label: "Wardrobe" },
+            { id: "props", label: "Props" },
+            ...Object.entries(CATEGORY_LABEL).map(([id, label]) => ({ id, label })),
+          ]}
+        />
+      </section>
 
       <section>
         <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">

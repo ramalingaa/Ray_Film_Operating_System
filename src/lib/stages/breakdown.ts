@@ -4,8 +4,10 @@
  * that triggered it. Code only: it reads the story graph built by the
  * continuity stage and the parsed script.
  */
-import { CATEGORY_RULES, isExterior, isMagicHour, isMinor, isNight, MAGIC_HOUR, NIGHT_EXTERIOR, statedAges, type DeptRule } from "../breakdown/rules";
+import { CATEGORY_RULES, isExterior, isMagicHour, isMinor, isNight, MAGIC_HOUR, minorMatcher, NIGHT_EXTERIOR, statedAges, type DeptRule } from "../breakdown/rules";
 import { loadState } from "../checks/state";
+import type { ContinuityReport } from "./continuity";
+import { stageReport } from "./reports";
 import { nameOf } from "../checks/types";
 import { BREAKDOWN_CATEGORIES, type BreakdownCategory } from "../extract/schema";
 import { parseFountain } from "../fountain";
@@ -59,7 +61,9 @@ export const breakdownStage: StageDef<BreakdownReport> = {
   summary: "Cast, wardrobe, props and department elements per scene, with alerts for minors, stunts, weapons, fire, water, animals, vehicles and night work.",
   async step({ ctx, run }) {
     if (!run.scriptText || !run.scriptDocId) throw new Error("the continuity stage has not stored the script yet");
-    const state = await loadState(ctx.db, run.scriptDocId);
+    const continuity = await stageReport<ContinuityReport>(ctx.db, run.id, "continuity");
+    // Only this production's sheets; [] when it has none (older reports fall back to the latest).
+    const state = await loadState(ctx.db, run.scriptDocId, continuity.sheetDocIds);
     const parsed = parseFountain(run.scriptText);
     const docName = state.facts.find((f) => f.sourceDocId === run.scriptDocId)?.sourceDocName ?? run.sourceName;
     const byNumber = new Map(state.scenes.map((s) => [s.number, s]));
@@ -93,6 +97,19 @@ export const breakdownStage: StageDef<BreakdownReport> = {
       const eighths = sceneEighths(p);
       return { number: p.number, heading: p.heading, intExt: p.intExt, time: p.timeOfDay, eighths, pages: formatEighths(eighths), storyDay: info?.storyDay ?? null, cast, wardrobe, props, elements };
     });
+
+    // A child is identified once (where the age is stated) but needs care in every scene they are in.
+    const minorItems = scenes.flatMap((s) => s.elements.filter((e) => e.category === "minor").map((e) => e.item));
+    const childOf = minorMatcher(minorItems);
+    // Reuse the label where the age was stated ("SAMI (10)") so the alert lists each child once.
+    const labelOf = (name: string) => minorItems.find((i) => i.replace(/\s*\(\d+\)\s*$/, "").toUpperCase() === name.toUpperCase()) ?? name;
+    for (const s of scenes) {
+      for (const name of s.cast.filter(childOf)) {
+        if (s.elements.some((e) => e.category === "minor" && childOf(name) && e.item.toUpperCase().startsWith(name.toUpperCase()))) continue;
+        const p = parsed.scenes.find((x) => x.number === s.number)!;
+        s.elements.push({ category: "minor", item: labelOf(name), detail: "child performer in this scene", cite: { docName, line: p.startLine, snippet: p.heading, sceneNumber: s.number } });
+      }
+    }
 
     // ---- alerts ---------------------------------------------------------------------
     const alerts: DeptAlert[] = [];

@@ -1,5 +1,6 @@
 import { Section, Stat } from "@/components/run-bits";
 import type { BudgetReport } from "@/lib/stages/budget";
+import { BudgetBars } from "@/components/visuals/production-charts";
 
 export function BudgetReportView({ r }: { r: BudgetReport }) {
   const money = (n: number) => new Intl.NumberFormat("en", { style: "currency", currency: r.currency, maximumFractionDigits: 0 }).format(n);
@@ -14,6 +15,10 @@ export function BudgetReportView({ r }: { r: BudgetReport }) {
           <Stat key={s.section} label={s.section} value={money(s.amount)} hint={`${Math.round((s.amount / r.total) * 100)}%`} />
         ))}
       </div>
+
+      <Section title="Where the money goes" note="Cost by section of the top sheet.">
+        <BudgetBars sections={r.sections} money={money} />
+      </Section>
 
       <Section title="Biggest cost drivers">
         <ol className="list-decimal space-y-1 pl-5 text-sm">

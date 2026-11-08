@@ -55,6 +55,9 @@ export const intakeStage: StageDef<IntakeReport> = {
       return { done: false, awaiting: "Choose how the screenplay is made: write it from the story, or provide your own." };
     }
 
+    if (generated) {
+      warnings.push("This is a scene outline without dialogue, so it is shorter on the page than the finished film will be. Treat the running time as a floor.");
+    }
     const parsed = parseFountain(scriptText);
     if (parsed.scenes.length === 0) throw new Error("No scenes found. A screenplay needs scene headings such as INT. KITCHEN - DAY.");
     const scenes = parsed.scenes.map((s) => {

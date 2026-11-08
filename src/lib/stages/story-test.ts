@@ -33,6 +33,17 @@ export const StoryDraftSchema = z.object({
   setups: z.array(z.object({ description: z.string(), paid_off: z.boolean(), ...cite })),
   strengths: z.array(z.object({ point: z.string(), ...cite })),
   questions: z.array(z.object({ question: z.string(), why: z.string() })),
+  characters: z.array(
+    z.object({
+      name: z.string(),
+      role: z.enum(["protagonist", "antagonist", "supporting", "minor"]),
+      want: z.string().nullable(),
+      description: z.string(),
+      age: z.number().int().nullable(),
+      ...cite,
+    }),
+  ),
+  relationships: z.array(z.object({ a: z.string(), b: z.string(), relation: z.string(), ...cite })),
 });
 export type StoryDraft = z.infer<typeof StoryDraftSchema>;
 
@@ -42,16 +53,22 @@ export interface StoryTestReport {
   words: number;
   /** Too short (a logline or paragraph) for beat positions to mean anything. */
   tooShortToTime: boolean;
+  /** Short-film length: the 15 beats are a reference, so beat notes are low priority. */
+  shortForm?: boolean;
   logline: Omit<StoryDraft["logline"], "source_line" | "source_snippet"> & { cite?: Cite };
   beats: { id: BeatId; title: string; present: boolean; position: number | null; expected: string; timing: BeatTiming; note: string; cite?: Cite }[];
   setups: { description: string; paidOff: boolean; cite?: Cite }[];
   strengths: { point: string; cite?: Cite }[];
   questions: StoryDraft["questions"];
+  characters: { name: string; role: StoryDraft["characters"][number]["role"]; want: string | null; description: string; age: number | null; cite?: Cite }[];
+  relationships: { a: string; b: string; relation: string; cite?: Cite }[];
   issues: StoryIssue[];
   dropped: string[];
 }
 
 const SHORT_WORDS = 400;
+/** Under this many words, a story is short-film material (roughly 10 minutes or less). */
+const SHORT_FILM_WORDS = 1500;
 
 /** Pure: verify and measure a development read of `story`. */
 export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model: string; cacheHit: boolean }): StoryTestReport {
@@ -61,7 +78,16 @@ export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model
   const dropped: string[] = [];
   const words = wordCount(text);
   const tooShortToTime = words < SHORT_WORDS;
-  const offsetOf = (line: number) => lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
+  /** Where in the text a citation starts: the line's offset plus where the quote sits in it (paragraphs are often one long line). */
+  const offsetOf = (cite: Cite) => {
+    const start = lines.slice(0, cite.line - 1).reduce((n, l) => n + l.length + 1, 0);
+    const lineText = (lines[cite.line - 1] ?? "").toLowerCase();
+    const head = cite.snippet.toLowerCase().split(/\s+/).slice(0, 4).join(" ");
+    const within = lineText.indexOf(head);
+    return start + (within >= 0 ? within : 0);
+  };
+  /** A short-film story: beat timings are a reference only. */
+  const shortForm = words < SHORT_FILM_WORDS;
 
   const check = (what: string, line: number | null, snippet: string | null): Cite | undefined => {
     if (line == null || !snippet) return undefined;
@@ -75,7 +101,7 @@ export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model
     const m = a.beats.find((x) => x.beat === b.id);
     const c = m?.present ? check(b.title, m.source_line, m.source_snippet) : undefined;
     const present = !!m?.present && !!c;
-    const position = c && !tooShortToTime ? Math.min(1, offsetOf(c.line) / Math.max(1, text.length)) : null;
+    const position = c && !tooShortToTime ? Math.min(1, offsetOf(c) / Math.max(1, text.length)) : null;
     return {
       id: b.id,
       title: b.title,
@@ -95,7 +121,7 @@ export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model
   const rest = a.logline.missing.filter((m) => !/protagonist|goal/i.test(m));
   if (rest.length) issues.push({ severity: "medium", title: `Not clear yet: ${rest.join(", ")}`, detail: a.logline.one_sentence, cites: loglineCite ? [loglineCite] : [] });
 
-  const missingSeverity = tooShortToTime ? "low" : "medium";
+  const missingSeverity = shortForm ? "low" : "medium";
   for (const b of beats.filter((x) => !x.present)) issues.push({ severity: missingSeverity, title: `No ${b.title} yet`, detail: b.note, cites: [] });
   for (const b of beats.filter((x) => x.present && x.timing !== "on_time")) {
     issues.push({ severity: "low", title: `${b.title} comes ${b.timing} (${pct(b.position!)} of the story)`, detail: `It usually lands at ${b.expected}. ${b.note}`, cites: b.cite ? [b.cite] : [] });
@@ -104,7 +130,7 @@ export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model
   for (const [x, y] of outOfOrder(positions)) {
     const bx = BEATS.find((b) => b.id === x)!.title;
     const by = BEATS.find((b) => b.id === y)!.title;
-    issues.push({ severity: "medium", title: `${bx} comes after ${by}`, detail: "The turning points are out of their usual order.", cites: [] });
+    issues.push({ severity: shortForm ? "low" : "medium", title: `${bx} comes after ${by}`, detail: "The turning points are out of their usual order.", cites: [] });
   }
 
   const setups = a.setups.map((s) => ({ description: s.description, paidOff: s.paid_off, cite: check(`setup "${s.description}"`, s.source_line, s.source_snippet) }));
@@ -116,11 +142,23 @@ export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model
     ...meta,
     words,
     tooShortToTime,
+    shortForm,
     logline: { protagonist: a.logline.protagonist, goal: a.logline.goal, stakes: a.logline.stakes, obstacle: a.logline.obstacle, one_sentence: a.logline.one_sentence, missing: a.logline.missing, cite: loglineCite },
     beats,
     setups,
     strengths: a.strengths.map((s) => ({ point: s.point, cite: check("strength", s.source_line, s.source_snippet) })),
     questions: a.questions,
+    characters: a.characters.map((c) => ({ name: c.name, role: c.role, want: c.want, description: c.description, age: c.age, cite: check(`character ${c.name}`, c.source_line, c.source_snippet) })),
+    // A relationship must join two known characters and quote the story; others are dropped.
+    relationships: a.relationships.flatMap((x) => {
+      const known = (n: string) => a.characters.some((c) => c.name.toLowerCase() === n.toLowerCase());
+      if (!known(x.a) || !known(x.b)) {
+        dropped.push(`relationship ${x.a}–${x.b}: names a character not in the cast list`);
+        return [];
+      }
+      const c = check(`relationship ${x.a}–${x.b}`, x.source_line, x.source_snippet);
+      return c ? [{ a: x.a, b: x.b, relation: x.relation, cite: c }] : [];
+    }),
     issues,
     dropped,
   };
@@ -137,8 +175,15 @@ export const storyTestStage: StageDef<StoryTestReport | Skipped> = {
       ctx,
       "extract",
       STORY_DRAFT_PROMPT_VERSION,
-      { system: STORY_DRAFT_SYSTEM, user: storyDraftUserPrompt(run.title, numberedScript(run.storyText)), schema: StoryDraftSchema, schemaName: "story_draft", maxTokens: 12000 },
+      { system: STORY_DRAFT_SYSTEM, user: storyDraftUserPrompt(run.title, numberedScript(run.storyText)), schema: StoryDraftSchema, schemaName: "story_draft", maxTokens: 6000 },
       "story-developer",
+      `run ${run.id}`,
+      (a) => {
+        if (wordCount(run.storyText!) < 60) return null;
+        if (a.characters.length === 0) return "no characters listed";
+        if (a.beats.filter((b) => b.present).length < 3) return "fewer than 3 beats found";
+        return null;
+      },
     );
     const report = buildStoryTestReport(r.data, run.storyText, { model: r.model, cacheHit: r.cacheHit });
     for (const d of report.dropped) await ctx.ledger.issue("story-developer", "warning", `run ${run.id}`, d);
