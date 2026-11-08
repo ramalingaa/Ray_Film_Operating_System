@@ -1,0 +1,7 @@
+location_name,aliases,int_ext,notes
+DOCKS,PIER|HARBOR DOCKS,EXT,"Wooden pier, one working lamp post"
+HARBOR OFFICE,HARBORMASTER'S OFFICE,INT,Cluttered office overlooking the docks
+HARBOR ROAD,,EXT,Coastal road out of the harbor
+MAYA'S APARTMENT,MAYA'S PLACE,INT,"Third-floor walk-up, one couch"
+LIGHTHOUSE,OLD LIGHTHOUSE,INT/EXT,Decommissioned; spiral stair to the lamp room
+POLICE STATION,PRECINCT,INT,Inspector Okafor's office
