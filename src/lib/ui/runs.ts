@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { runs, runStages, type RunStage } from "../db/schema";
 import { getStage, STAGES } from "../stages";
@@ -43,7 +43,7 @@ export interface RunView {
   greenlit: boolean;
 }
 
-function chapterState(i: number, approvedThrough: number, storyText: string | null, stages: StageView[]): { state: ChapterState; note: string | null } {
+export function chapterState(i: number, approvedThrough: number, storyText: string | null, stages: StageView[]): { state: ChapterState; note: string | null } {
   if (i === 0 && !storyText) return { state: "skipped", note: "Started from a screenplay." };
   if (i <= approvedThrough) return { state: "approved", note: null };
   if (i > approvedThrough + 1) return { state: "locked", note: null };
@@ -58,11 +58,32 @@ function chapterState(i: number, approvedThrough: number, storyText: string | nu
 
 export async function listRuns(db: Db, limit = 30) {
   const rows = await db
-    .select({ id: runs.id, title: runs.title, inputKind: runs.inputKind, status: runs.status, createdAt: runs.createdAt, sourceName: runs.sourceName, approvedThrough: runs.approvedThrough })
+    .select({
+      id: runs.id,
+      title: runs.title,
+      inputKind: runs.inputKind,
+      status: runs.status,
+      createdAt: runs.createdAt,
+      updatedAt: runs.updatedAt,
+      sourceName: runs.sourceName,
+      approvedThrough: runs.approvedThrough,
+      storyText: runs.storyText,
+    })
     .from(runs)
     .orderBy(desc(runs.id))
     .limit(limit);
-  return rows.map((r) => ({ ...r, chaptersApproved: r.approvedThrough + 1, chaptersTotal: CHAPTERS.length, greenlit: r.approvedThrough >= CHAPTERS.length - 1 }));
+  const ids = rows.map((r) => r.id);
+  const stageRows = ids.length ? await db.select().from(runStages).where(inArray(runStages.runId, ids)) : [];
+  return rows.map(({ storyText, ...r }) => {
+    const greenlit = r.approvedThrough >= CHAPTERS.length - 1;
+    const current = greenlit ? CHAPTERS.length - 1 : Math.max(0, r.approvedThrough + 1);
+    const views = CHAPTERS[current].stages.flatMap((st) => {
+      const row = stageRows.find((x) => x.runId === r.id && x.stage === st);
+      return row ? [{ id: row.stage, title: row.stage, summary: "", status: row.status, progress: row.progress, error: row.error, report: null, finishedAt: row.finishedAt } satisfies StageView] : [];
+    });
+    const state = greenlit ? ("approved" as ChapterState) : chapterState(current, r.approvedThrough, storyText, views).state;
+    return { ...r, greenlit, current, currentState: state, chaptersApproved: r.approvedThrough + 1, chaptersTotal: CHAPTERS.length };
+  });
 }
 
 export async function loadRun(db: Db, id: number): Promise<RunView | undefined> {

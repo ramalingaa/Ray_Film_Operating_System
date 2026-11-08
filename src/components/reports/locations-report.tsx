@@ -15,7 +15,7 @@ export function LocationsReportView({ r }: { r: LocationsReport }) {
 
       <Section title={`Flags (${r.flags.length})`}>
         {r.flags.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nothing flagged.</p>
+          <p className="text-sm text-muted">Nothing flagged.</p>
         ) : (
           <ul className="space-y-3">
             {r.flags.map((f, i) => (
@@ -24,7 +24,7 @@ export function LocationsReportView({ r }: { r: LocationsReport }) {
                   <SeverityBadge severity={f.severity} />
                   <span className="font-medium">{f.title}</span>
                 </div>
-                <p className="text-zinc-600 dark:text-zinc-400">{f.detail}</p>
+                <p className="text-fg-2 dark:text-muted">{f.detail}</p>
                 {f.cites.map((c, j) => (
                   <Cite key={j} line={c.line} snippet={c.snippet} scene={c.sceneNumber} />
                 ))}
@@ -36,7 +36,7 @@ export function LocationsReportView({ r }: { r: LocationsReport }) {
 
       <Section title="Sets" note="Largest first. Pages are estimates.">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-zinc-500">
+          <thead className="text-left text-xs text-muted">
             <tr>
               <th className="py-1 pr-2 font-medium">Set</th>
               <th className="py-1 pr-2 font-medium">Int/Ext</th>
@@ -48,14 +48,14 @@ export function LocationsReportView({ r }: { r: LocationsReport }) {
           </thead>
           <tbody>
             {r.sets.map((s) => (
-              <tr key={s.name + s.firstCite.line} className="border-t border-zinc-200 align-top dark:border-zinc-800">
+              <tr key={s.name + s.firstCite.line} className="border-t border-line align-top dark:border-zinc-800">
                 <td className="py-1.5 pr-2 font-medium">{s.name}</td>
                 <td className="py-1.5 pr-2">{s.intExt.join(", ")}</td>
                 <td className="py-1.5 pr-2">{s.times.join(", ")}</td>
-                <td className="py-1.5 pr-2 text-zinc-500">{s.scenes.join(", ")}</td>
+                <td className="py-1.5 pr-2 text-muted">{s.scenes.join(", ")}</td>
                 <td className="py-1.5 pr-2 text-right tabular-nums">{s.pages}</td>
                 <td className="py-1.5">
-                  {s.onSheet == null ? "—" : s.onSheet ? <span title={s.sheetCite ? `${s.sheetCite.docName} line ${s.sheetCite.line}` : ""}>yes</span> : <span className="text-red-700 dark:text-red-400">missing</span>}
+                  {s.onSheet == null ? "—" : s.onSheet ? <span title={s.sheetCite ? `${s.sheetCite.docName} line ${s.sheetCite.line}` : ""}>yes</span> : <span className="text-rose dark:text-red-400">missing</span>}
                 </td>
               </tr>
             ))}

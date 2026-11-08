@@ -12,7 +12,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * finish. Closing the page pauses the run; reopening it resumes. Safe to
  * mount twice: the server lets only one step hold a run, others get "busy".
  */
-export function RunDriver({ runId, active }: { runId: number; active: boolean }) {
+export function RunDriver({ runId, active, silent = false }: { runId: number; active: boolean; silent?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +47,13 @@ export function RunDriver({ runId, active }: { runId: number; active: boolean })
   }, [active, runId, router]);
 
   if (!active) return null;
+  if (silent) {
+    return error ? (
+      <p role="status" className="text-sm text-rose">
+        Retrying after a connection error: {error}
+      </p>
+    ) : null;
+  }
   return (
     <p className="text-sm text-ink-soft">
       <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-gold align-middle" />

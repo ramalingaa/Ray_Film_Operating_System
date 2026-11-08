@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Nunito_Sans } from "next/font/google";
+import { Cormorant_Garamond, Inter } from "next/font/google";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
@@ -10,22 +10,22 @@ const display = Cormorant_Garamond({
   style: ["normal", "italic"],
 });
 
-const body = Nunito_Sans({
+const body = Inter({
   variable: "--font-body",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "ReelGraph",
-  description: "From a story to a greenlit production, one chapter at a time.",
+  description: "From the first idea to the first day of shooting, stage by stage.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable} antialiased`}>
-      <body className="flex h-dvh flex-col bg-paper text-ink print:h-auto">
+      <body className="flex min-h-dvh flex-col bg-ivory text-fg">
         <Nav />
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto print:overflow-visible">{children}</main>
+        <main className="flex flex-1 flex-col">{children}</main>
       </body>
     </html>
   );

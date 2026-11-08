@@ -25,7 +25,7 @@ async function Review() {
 
   const open = data.findings.filter((f) => f.status === "open").length;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-[calc(100dvh-68px)] min-h-0 flex-col">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-zinc-200 px-4 py-2 text-sm dark:border-zinc-800">
         <span className="font-medium">
           {data.doc.name} <span className="text-zinc-500">version {data.doc.version}</span>

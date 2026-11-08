@@ -14,23 +14,23 @@ export function ContinuityReportView({ r, review }: { r: ContinuityReport; revie
         <Stat label="Scenes read by the model" value={r.extraction.model ? `${r.extraction.extracted} of ${r.sceneCount}` : "none"} hint={r.extraction.model ? `${r.extraction.cached} from cache` : "no model configured"} />
         <Stat label="Possible conflicts judged" value={r.judge.candidates} hint={`${r.judge.accepted} confirmed, ${r.judge.rejected} rejected`} />
       </div>
-      {r.extraction.dropped > 0 && <p className="mb-2 text-xs text-zinc-500">{r.extraction.dropped} extracted item(s) were dropped because their quoted line could not be found in the scene.</p>}
+      {r.extraction.dropped > 0 && <p className="mb-2 text-xs text-muted">{r.extraction.dropped} extracted item(s) were dropped because their quoted line could not be found in the scene.</p>}
       {r.failedChecks.map((f) => (
-        <p key={f.id} className="mb-2 text-sm text-red-700 dark:text-red-400">
+        <p key={f.id} className="mb-2 text-sm text-rose dark:text-red-400">
           Check {getCheck(f.id)?.title ?? f.id} failed: {f.error}
         </p>
       ))}
       {checks.length > 0 && (
-        <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mb-4 text-sm text-fg-2 dark:text-muted">
           By check: {checks.map(([id, n]) => `${getCheck(id)?.title ?? id} ${n}`).join(" · ")}
         </p>
       )}
       {review ? (
-        <div className="flex h-[70vh] min-h-0 flex-col overflow-hidden rounded border border-zinc-200 dark:border-zinc-800">
+        <div className="flex h-[70vh] min-h-0 flex-col overflow-hidden rounded border border-line dark:border-zinc-800">
           <ScriptReview scenes={review.scenes} findings={review.findings} />
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">The script for this run is no longer stored.</p>
+        <p className="text-sm text-muted">The script for this run is no longer stored.</p>
       )}
     </div>
   );

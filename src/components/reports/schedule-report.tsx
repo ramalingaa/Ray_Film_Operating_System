@@ -14,7 +14,7 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
 
       <Section title={`Checks (${r.checks.length})`}>
         {r.checks.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nothing flagged.</p>
+          <p className="text-sm text-muted">Nothing flagged.</p>
         ) : (
           <ul className="space-y-3">
             {r.checks.map((c, i) => (
@@ -23,7 +23,7 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
                   <SeverityBadge severity={c.severity} />
                   <span className="font-medium">{c.title}</span>
                 </div>
-                <p className="text-zinc-600 dark:text-zinc-400">{c.detail}</p>
+                <p className="text-fg-2 dark:text-muted">{c.detail}</p>
                 {c.cites.map((x, j) => (
                   <div key={j}>
                     <Cite line={x.line} snippet={x.snippet} scene={x.sceneNumber} />
@@ -38,8 +38,8 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
       <Section title="Stripboard (draft)" note="One block per shoot day. Day work first, then night work, grouped by set.">
         <div className="space-y-3">
           {r.days.map((d) => (
-            <div key={d.day} className="overflow-hidden rounded border border-zinc-200 dark:border-zinc-800">
-              <div className={`flex justify-between px-3 py-1.5 text-xs font-medium ${d.light === "night" ? "bg-indigo-900 text-indigo-100" : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}`}>
+            <div key={d.day} className="overflow-hidden rounded border border-line dark:border-zinc-800">
+              <div className={`flex justify-between px-3 py-1.5 text-xs font-medium ${d.light === "night" ? "bg-indigo-900 text-indigo-100" : "bg-amber-soft text-amber dark:bg-amber-950 dark:text-amber-200"}`}>
                 <span>
                   Day {d.day} · {d.light}
                 </span>
@@ -50,10 +50,10 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
               <table className="w-full text-sm">
                 <tbody>
                   {d.strips.map((s) => (
-                    <tr key={s.scene} className="border-t border-zinc-100 dark:border-zinc-900">
+                    <tr key={s.scene} className="border-t border-line-2 dark:border-zinc-900">
                       <td className="w-10 px-3 py-1 tabular-nums">{s.scene}</td>
                       <td className="py-1 pr-2 font-mono text-xs">{s.heading}</td>
-                      <td className="py-1 pr-2 text-zinc-500">{s.cast.join(", ")}</td>
+                      <td className="py-1 pr-2 text-muted">{s.cast.join(", ")}</td>
                       <td className="w-16 py-1 pr-3 text-right tabular-nums">{s.pages}</td>
                     </tr>
                   ))}
@@ -67,7 +67,7 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
       <Section title="Day out of days" note="W = works, H = paid hold between first and last work day.">
         <div className="overflow-x-auto">
           <table className="text-sm">
-            <thead className="text-xs text-zinc-500">
+            <thead className="text-xs text-muted">
               <tr>
                 <th className="py-1 pr-3 text-left font-medium">Cast</th>
                 {dayNumbers.map((n) => (
@@ -81,11 +81,11 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
             </thead>
             <tbody>
               {r.dood.map((c) => (
-                <tr key={c.name} className="border-t border-zinc-200 dark:border-zinc-800">
+                <tr key={c.name} className="border-t border-line dark:border-zinc-800">
                   <td className="py-1 pr-3 whitespace-nowrap">{c.name}</td>
                   {dayNumbers.map((n) => (
                     <td key={n} className="text-center font-mono text-xs">
-                      {c.workDays.includes(n) ? <span className="text-emerald-700 dark:text-emerald-400">W</span> : c.holdDays.includes(n) ? <span className="text-amber-700 dark:text-amber-400">H</span> : ""}
+                      {c.workDays.includes(n) ? <span className="text-ok dark:text-emerald-400">W</span> : c.holdDays.includes(n) ? <span className="text-amber dark:text-amber-400">H</span> : ""}
                     </td>
                   ))}
                   <td className="pl-3 text-right tabular-nums">{c.workDays.length}</td>
@@ -98,7 +98,7 @@ export function ScheduleReportView({ r }: { r: ScheduleReport }) {
       </Section>
 
       <Section title="Assumptions">
-        <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-fg-2 dark:text-muted">
           {r.assumptions.map((a, i) => (
             <li key={i}>{a}</li>
           ))}

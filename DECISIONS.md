@@ -237,3 +237,14 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 62. **The look is an original storybook theme** (night sky, parchment, gold,
     Cormorant Garamond with Nunito Sans), with light and dark modes. No
     third-party characters, logos or brand fonts.
+63. **The studio UI follows the approved design canvas** ("ReelGraph — Studio
+    UI Design"): ink and ivory, gold only for the one next action on a screen,
+    one colour and icon per stage (`src/components/journey/stage-look.tsx`),
+    Cormorant Garamond for display and Inter for the interface. The home page
+    offers two doors (story, screenplay) and draws the six stages as one
+    connected journey; `/new` is a focused start page; a production is a
+    workspace with a connected stage rail, a stage header with a live check
+    summary, a working view that shows each test as it runs, and a single
+    decision bar. A single light theme (dark variants only under `.dark`).
+64. **Pages scroll as documents** (not inside a fixed-height `<main>`) so
+    navigation resets scroll and the back button restores it.

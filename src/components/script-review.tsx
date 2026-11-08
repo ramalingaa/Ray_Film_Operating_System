@@ -5,8 +5,8 @@ import { dismissFinding, flagFinding, reopenFinding } from "@/app/actions";
 import type { FindingStatus, FindingView, SceneView, Severity } from "@/lib/ui/queries";
 
 const SEVERITY: Record<Severity, { label: string; hint: string; badge: string; ring: string }> = {
-  high: { label: "High", hint: "Likely visible on screen", badge: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200", ring: "ring-red-400" },
-  medium: { label: "Medium", hint: "Worth checking", badge: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200", ring: "ring-amber-400" },
+  high: { label: "High", hint: "Likely visible on screen", badge: "bg-red-100 text-rose dark:bg-red-950 dark:text-red-200", ring: "ring-red-400" },
+  medium: { label: "Medium", hint: "Worth checking", badge: "bg-amber-soft text-amber dark:bg-amber-950 dark:text-amber-200", ring: "ring-amber-400" },
   low: { label: "Low", hint: "Minor or paperwork", badge: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200", ring: "ring-zinc-400" },
 };
 
@@ -41,14 +41,14 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
       {/* Script */}
-      <section aria-label="Script" className="min-h-0 overflow-y-auto border-zinc-200 px-4 py-4 lg:border-r dark:border-zinc-800">
+      <section aria-label="Script" className="min-h-0 overflow-y-auto border-line px-4 py-4 lg:border-r dark:border-zinc-800">
         {scenes.map((scene) => (
           <article
             key={scene.number}
-            className={`mb-6 rounded-lg ${selectedScenes.has(scene.number) ? "bg-amber-50/60 dark:bg-amber-950/20" : ""}`}
+            className={`mb-6 rounded-lg ${selectedScenes.has(scene.number) ? "bg-amber-soft/60 dark:bg-amber-950/20" : ""}`}
           >
             <header className="sticky top-0 z-10 flex items-baseline gap-3 bg-white/95 py-1 backdrop-blur dark:bg-zinc-950/95">
-              <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">Scene {scene.number}</span>
+              <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white dark:bg-paper-2 dark:text-zinc-900">Scene {scene.number}</span>
               <span className="font-mono text-sm font-semibold">{scene.heading}</span>
               {scene.isFlashback && <span className="text-xs text-violet-700 dark:text-violet-300">flashback</span>}
             </header>
@@ -58,7 +58,7 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
                 const hit = highlighted.has(n);
                 return (
                   <div key={n} id={lineId(n)} className={`flex ${hit ? "rounded bg-amber-200 dark:bg-amber-800/60" : ""}`}>
-                    <span className="w-12 shrink-0 pr-3 text-right text-zinc-400 select-none">{n}</span>
+                    <span className="w-12 shrink-0 pr-3 text-right text-muted select-none">{n}</span>
                     <span className="min-w-0">{text || " "}</span>
                   </div>
                 );
@@ -69,15 +69,15 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
       </section>
 
       {/* Findings */}
-      <section aria-label="Findings" className="flex min-h-0 flex-col border-t border-zinc-200 lg:border-t-0 dark:border-zinc-800">
-        <div className="flex gap-1 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800" role="tablist">
+      <section aria-label="Findings" className="flex min-h-0 flex-col border-t border-line lg:border-t-0 dark:border-zinc-800">
+        <div className="flex gap-1 border-b border-line px-3 py-2 dark:border-zinc-800" role="tablist">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               role="tab"
               aria-selected={filter === f.id}
               onClick={() => setFilter(f.id)}
-              className={`rounded-md px-3 py-1.5 text-sm ${filter === f.id ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+              className={`rounded-md px-3 py-1.5 text-sm ${filter === f.id ? "bg-fg text-ivory dark:bg-paper-2 dark:text-zinc-900" : "hover:bg-paper-2 dark:hover:bg-zinc-800"}`}
             >
               {f.label} <span className="opacity-60">{count(f.id)}</span>
             </button>
@@ -85,7 +85,7 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {visible.length === 0 && (
-            <p className="px-2 py-8 text-center text-sm text-zinc-500">
+            <p className="px-2 py-8 text-center text-sm text-muted">
               {filter === "active" ? "Nothing left to review. Every conflict is dismissed or flagged." : "No findings here."}
             </p>
           )}
@@ -94,7 +94,7 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
             if (!group.length) return null;
             return (
               <div key={sev} className="mb-5">
-                <h2 className="mb-2 flex items-baseline gap-2 px-1 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                <h2 className="mb-2 flex items-baseline gap-2 px-1 text-xs font-semibold tracking-wide text-muted uppercase">
                   {SEVERITY[sev].label} <span className="font-normal normal-case">· {SEVERITY[sev].hint} · {group.length}</span>
                 </h2>
                 <ul className="space-y-2">
@@ -116,28 +116,28 @@ export function ScriptReview({ scenes, findings }: { scenes: SceneView[]; findin
 function FindingCard({ finding: f, selected, onSelect }: { finding: FindingView; selected: boolean; onSelect: () => void }) {
   const sev = SEVERITY[f.severity];
   return (
-    <div className={`rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 ${selected ? `ring-2 ${sev.ring}` : ""}`}>
+    <div className={`rounded-lg border border-line bg-white dark:border-zinc-800 dark:bg-zinc-900 ${selected ? `ring-2 ${sev.ring}` : ""}`}>
       <button onClick={onSelect} aria-expanded={selected} className="w-full px-3 py-2.5 text-left">
         <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
           <span className={`rounded px-1.5 py-0.5 font-medium ${sev.badge}`}>{sev.label}</span>
-          <span className="text-zinc-500">{f.checkTitle}</span>
-          <span className="text-zinc-500">· scene {f.sceneNumbers.join(", ")}</span>
+          <span className="text-muted">{f.checkTitle}</span>
+          <span className="text-muted">· scene {f.sceneNumbers.join(", ")}</span>
           {f.status === "follow_up" && <span className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-900 dark:bg-sky-950 dark:text-sky-200">follow-up</span>}
-          {f.status === "dismissed_intentional" && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">intentional</span>}
+          {f.status === "dismissed_intentional" && <span className="rounded bg-paper-2 px-1.5 py-0.5 text-fg-2 dark:bg-zinc-800 dark:text-zinc-300">intentional</span>}
         </div>
         <p className="text-sm font-medium">{f.title}</p>
       </button>
 
       {selected && (
-        <div className="space-y-3 border-t border-zinc-100 px-3 py-3 text-sm dark:border-zinc-800">
-          <p className="leading-relaxed text-zinc-700 dark:text-zinc-300">{f.explanation}</p>
+        <div className="space-y-3 border-t border-line-2 px-3 py-3 text-sm dark:border-zinc-800">
+          <p className="leading-relaxed text-fg-2 dark:text-zinc-300">{f.explanation}</p>
 
           <div>
-            <h3 className="mb-1 text-xs font-semibold text-zinc-500 uppercase">Where this comes from</h3>
+            <h3 className="mb-1 text-xs font-semibold text-muted uppercase">Where this comes from</h3>
             <ul className="space-y-1.5">
               {f.sources.map((s, i) => (
-                <li key={i} className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-950">
-                  <div className="text-xs text-zinc-500">
+                <li key={i} className="rounded border border-line bg-paper-2 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-950">
+                  <div className="text-xs text-muted">
                     {s.isScript ? "Script" : s.docKind === "costume_sheet" ? "Costume sheet" : s.docKind === "location_sheet" ? "Location sheet" : s.docName}, line {s.line}
                     {s.isScript && (
                       <a href={`#${lineId(s.line)}`} className="ml-2 underline">
@@ -151,7 +151,7 @@ function FindingCard({ finding: f, selected, onSelect }: { finding: FindingView;
             </ul>
           </div>
 
-          {f.dismissReason && <p className="text-xs text-zinc-500">Dismissed because: {f.dismissReason}</p>}
+          {f.dismissReason && <p className="text-xs text-muted">Dismissed because: {f.dismissReason}</p>}
 
           {f.status === "open" ? (
             <div className="flex flex-col gap-2">
@@ -161,19 +161,19 @@ function FindingCard({ finding: f, selected, onSelect }: { finding: FindingView;
                   name="reason"
                   placeholder="Why it's intentional (optional)"
                   aria-label="Reason for dismissing"
-                  className="min-w-0 flex-1 rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+                  className="min-w-0 flex-1 rounded border border-line bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
                 />
-                <button className="rounded bg-zinc-900 px-3 py-1 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">Dismiss as intentional</button>
+                <button className="rounded bg-zinc-900 px-3 py-1 text-sm text-white dark:bg-paper-2 dark:text-zinc-900">Dismiss as intentional</button>
               </form>
               <form action={flagFinding}>
                 <input type="hidden" name="id" value={f.id} />
-                <button className="rounded border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">Flag for follow-up</button>
+                <button className="rounded border border-line px-3 py-1 text-sm dark:border-zinc-700">Flag for follow-up</button>
               </form>
             </div>
           ) : (
             <form action={reopenFinding}>
               <input type="hidden" name="id" value={f.id} />
-              <button className="rounded border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">Reopen</button>
+              <button className="rounded border border-line px-3 py-1 text-sm dark:border-zinc-700">Reopen</button>
             </form>
           )}
         </div>
