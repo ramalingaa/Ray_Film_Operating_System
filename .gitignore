@@ -46,3 +46,5 @@ next-env.d.ts
 /.cache/
 /data/eval/last_run.json
 !.env.example
+/data/eval/*.db
+/data/eval/*.db-*

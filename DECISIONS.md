@@ -51,3 +51,18 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 13. **Ingest runs without models** (`--no-models`, or when no credentials are
     configured). Cues, headings, explicit days and sheet rows still become
     facts, and a warning issue records that model extraction did not run.
+14. **Eval manifest has an optional `also_checks` list.** One planted swap can
+    legitimately break two checks (a tuxedo in a CONTINUOUS scene contradicts
+    both the costume sheet and the previous scene). Findings from an
+    `also_checks` entry count as hits for precision, but are not required for
+    recall.
+15. **Eval matching is one-to-one and greedy**: largest scene overlap first,
+    required checks before optional ones. Errors whose check is not
+    implemented yet are reported as out of scope rather than counted as misses.
+16. **Eval uses its own database** (`data/eval/eval.db`, gitignored), so eval
+    runs never mix with the working story bible. Model responses are cached
+    there too, so re-running the eval is free.
+17. **The harness test drives a scripted fake extractor** that returns what a
+    careful extractor would read. It shows that, given correct facts, the
+    deterministic checks catch every planted error they own with zero false
+    alarms. Real-model numbers come from `npm run eval` with a key configured.

@@ -1,0 +1,107 @@
+# Ground truth for data/eval/script.seeded.fountain (a copy of data/script.fountain
+# with planted errors). Sheets are the clean data/costumes.csv and data/locations.csv.
+#
+# check_id     the check that must catch the error (counts toward recall)
+# also_checks  checks that may also legitimately fire on it (count as hits for
+#              precision, but are not required for recall)
+# scenes       scene numbers involved; a finding matches when its check matches
+#              and its scenes overlap these
+
+errors:
+  # --- costume_sheet_mismatch ---------------------------------------------
+  - id: E01
+    check_id: costume_sheet_mismatch
+    scenes: ["8"]
+    description: Okafor wears a camel overcoat; the sheet says charcoal overcoat.
+  - id: E02
+    check_id: costume_sheet_mismatch
+    scenes: ["6"]
+    description: Maya wears a red bomber jacket; the sheet says black leather jacket.
+  - id: E03
+    check_id: costume_sheet_mismatch
+    scenes: ["2"]
+    description: Voss wears a tweed blazer; the sheet says brown cardigan.
+  - id: E04
+    check_id: costume_sheet_mismatch
+    scenes: ["9"]
+    description: Voss wears his day-1 brown cardigan on day 2; the sheet says oilskin coat.
+
+  # --- impossible_costume_change ------------------------------------------
+  - id: E05
+    check_id: impossible_costume_change
+    also_checks: [costume_sheet_mismatch]
+    scenes: ["1", "2"]
+    description: Daniel wears a black tuxedo in scene 1 and a navy suit in the CONTINUOUS scene 2.
+  - id: E06
+    check_id: impossible_costume_change
+    also_checks: [costume_sheet_mismatch]
+    scenes: ["2", "3"]
+    description: Voss switches into a yellow raincoat MOMENTS LATER.
+
+  # --- costume_state_carryover --------------------------------------------
+  - id: E07
+    check_id: costume_state_carryover
+    scenes: ["3", "4"]
+    description: Daniel's jacket rips in scene 3 but is immaculate in the CONTINUOUS scene 4.
+  - id: E08
+    check_id: costume_state_carryover
+    scenes: ["9", "10"]
+    description: Maya's leather jacket is scorched in scene 9 and spotless in scene 10.
+
+  # --- timeline_order -----------------------------------------------------
+  - id: E09
+    check_id: timeline_order
+    scenes: ["5", "6"]
+    description: Scene 5 is labelled DAY 3, then scene 6 is DAY 2.
+  - id: E10
+    check_id: timeline_order
+    scenes: ["8"]
+    description: Scene 8 is labelled DAY 1 after day 2 has started, with no flashback marker.
+
+  # --- time_of_day_conflict -----------------------------------------------
+  - id: E11
+    check_id: time_of_day_conflict
+    scenes: ["1"]
+    description: Heading says NIGHT, action says the noon sun bakes the pier.
+  - id: E12
+    check_id: time_of_day_conflict
+    scenes: ["8"]
+    description: Heading says DAY, Okafor says it is two in the morning.
+  - id: E13
+    check_id: time_of_day_conflict
+    scenes: ["5"]
+    description: Heading says NIGHT, action says morning light floods the room.
+
+  # --- location_consistency -----------------------------------------------
+  - id: E14
+    check_id: location_consistency
+    scenes: ["4"]
+    description: CLIFF ROAD is not on the location sheet (the sheet has HARBOR ROAD).
+  - id: E15
+    check_id: location_consistency
+    scenes: ["5", "6"]
+    description: Maya's apartment is a third-floor walk-up in scene 5 and a ground-floor studio in scene 6.
+
+  # --- character_knowledge ------------------------------------------------
+  - id: E16
+    check_id: character_knowledge
+    scenes: ["4", "5"]
+    description: Maya heads for the lighthouse in scene 4; she only learns the ledger is there in scene 5.
+  - id: E17
+    check_id: character_knowledge
+    scenes: ["1", "5"]
+    description: Maya asks about the ledger in the lighthouse in scene 1, before learning it in scene 5.
+
+  # --- prop_lifecycle -----------------------------------------------------
+  - id: E18
+    check_id: prop_lifecycle
+    scenes: ["9", "10"]
+    description: The ledger burns to ash in scene 9; Maya leafs through it in scene 10.
+  - id: E19
+    check_id: prop_lifecycle
+    scenes: ["9", "10"]
+    description: The lantern shatters in scene 9; it still burns on the squad car in scene 10.
+  - id: E20
+    check_id: prop_lifecycle
+    scenes: ["8", "9"]
+    description: The brass key snaps in half in scene 8; Maya unlocks the door with it in scene 9.
