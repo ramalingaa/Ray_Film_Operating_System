@@ -6,11 +6,13 @@ import { retryFailedRun } from "@/app/actions";
 import { Loading, SetupNeeded } from "@/components/nav";
 import { ContinuityReportView } from "@/components/reports/continuity-report";
 import { IntakeReportView } from "@/components/reports/intake-report";
+import { StoryReportView } from "@/components/reports/story-report";
 import { StatusBadge } from "@/components/run-bits";
 import { RunDriver } from "@/components/run-driver";
 import { databaseProblem, getDb, type Db } from "@/lib/db/client";
 import type { ContinuityReport } from "@/lib/stages/continuity";
 import type { IntakeReport } from "@/lib/stages/intake";
+import type { Skipped, StoryReport } from "@/lib/stages/story";
 import { loadReview } from "@/lib/ui/queries";
 import { loadRun, type RunView, type StageView } from "@/lib/ui/runs";
 
@@ -105,6 +107,8 @@ async function StageBody({ stage, run, db }: { stage: StageView; run: RunView; d
   switch (stage.id) {
     case "intake":
       return <IntakeReportView r={stage.report as IntakeReport} scriptText={run.scriptText} />;
+    case "story":
+      return <StoryReportView r={stage.report as StoryReport | Skipped} />;
     case "continuity": {
       const r = stage.report as ContinuityReport;
       return <ContinuityReportView r={r} review={await loadReview(db, r.docId)} />;

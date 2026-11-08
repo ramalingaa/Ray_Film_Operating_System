@@ -19,8 +19,19 @@ async function stages(db: Awaited<ReturnType<typeof openDb>>, runId: number) {
   return Object.fromEntries(rows.map((r) => [r.stage, r]));
 }
 
+/** A minimal story read: no beats or cards, citing the first scene heading. */
+const minimalStory = (req: { user: string }) => {
+  const m = /^\s*(\d+)\| ((?:INT|EXT).*)$/m.exec(req.user)!;
+  return {
+    logline: { protagonist: null, goal: null, stakes: null, obstacle: null, one_sentence: "-", missing: [], source_line: Number(m[1]), source_snippet: m[2] },
+    beats: [],
+    scenes: [],
+    setups: [],
+  };
+};
+
 function gatewayFor(handlers: Parameters<typeof routerModel>[0]) {
-  const model = routerModel(handlers);
+  const model = routerModel({ story_analysis: minimalStory, ...handlers });
   return { model, gateway: new ModelGateway({ extract: ["fake:router"], judge: ["fake:router"] }, () => model) };
 }
 
@@ -80,6 +91,7 @@ describe("runs", () => {
     const { gateway, model } = gatewayFor({ scene_extraction: extraction, verdict: () => ({ conflict: false, confidence: 0.9, reason: "-" }) });
     const id = await createRun(db, { sourceName: "script.fountain", text: script });
     expect(await stepRun(db, id, { gateway, judgeSettings, budgetMs: 0 })).toEqual({ state: "progress", stage: "intake" });
+    expect(await stepRun(db, id, { gateway, judgeSettings, budgetMs: 0 })).toEqual({ state: "progress", stage: "story" });
     expect(await stepRun(db, id, { gateway, judgeSettings, budgetMs: 0 })).toEqual({ state: "progress", stage: "continuity" });
     const s = await stages(db, id);
     expect(s.continuity).toMatchObject({ status: "running", progress: "read 0 of 10 scenes" });
@@ -102,6 +114,15 @@ describe("runs", () => {
     expect(await stepRun(db, id, { gateway, judgeSettings })).toEqual({ state: "failed", stage: "intake" }); // still failed until retried
     await retryRun(db, id);
     expect(await runToEnd(db, id, { gateway, judgeSettings })).toEqual({ state: "done" });
+  });
+
+  it("finishes a screenplay without any model, marking model-only stages as skipped", async () => {
+    const db = await openDb(":memory:");
+    const id = await createRun(db, { sourceName: "script.fountain", text: script });
+    expect(await runToEnd(db, id, { judgeSettings })).toEqual({ state: "done" });
+    const s = await stages(db, id);
+    expect(JSON.parse(s.story.reportJson!)).toEqual({ skipped: "The story read needs a model, and none is configured." });
+    expect(JSON.parse(s.continuity.reportJson!)).toMatchObject({ extraction: { model: false } });
   });
 
   it("lets only one step hold a run at a time", async () => {

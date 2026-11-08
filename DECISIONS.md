@@ -173,3 +173,13 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     labelled as estimates. One page ≈ one minute of screen time.
 44. **The old Load page is replaced by the Analyze home page**; the
     latest-script review moved to `/review`.
+45. **The story read is one whole-script model call**, cached, with every
+    citation verified against the script by code; unverifiable beats, cards
+    and setups are dropped and listed. Beat positions are measured by code as
+    a share of the script from the first scene heading to the last line.
+46. **Beat ranges are generous and short-form aware.** Under 30 pages the
+    15-beat timings are guidance only and beat findings are low severity.
+    Missing protagonist or goal is high; other unclear logline elements are
+    medium.
+47. **A stage that needs a model is skipped, not failed, when none is
+    configured** (it reports why), so code-only stages still run.

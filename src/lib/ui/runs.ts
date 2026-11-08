@@ -1,7 +1,7 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { runs, runStages, type RunStage } from "../db/schema";
-import { getStage } from "../stages";
+import { getStage, STAGES } from "../stages";
 
 export interface StageView {
   id: RunStage;
@@ -46,13 +46,20 @@ export async function listRuns(db: Db, limit = 30) {
 export async function loadRun(db: Db, id: number): Promise<RunView | undefined> {
   const [run] = await db.select().from(runs).where(eq(runs.id, id));
   if (!run) return undefined;
-  const rows = await db.select().from(runStages).where(eq(runStages.runId, id)).orderBy(asc(runStages.ordinal));
+  const order = (stage: string) => {
+    const i = STAGES.findIndex((s) => s.id === stage);
+    return i < 0 ? STAGES.length : i;
+  };
+  const rows = (await db.select().from(runStages).where(eq(runStages.runId, id)).orderBy(asc(runStages.ordinal))).sort((a, b) => order(a.stage) - order(b.stage));
+  // A finished run picks up stages added since (they are created on its next step).
+  const missing = STAGES.some((s) => !rows.some((r) => r.stage === s.id));
+  const status = run.status === "done" && (missing || rows.some((r) => r.status !== "done")) ? "running" : run.status;
   return {
     id: run.id,
     title: run.title,
     inputKind: run.inputKind,
     sourceName: run.sourceName,
-    status: run.status,
+    status,
     scriptText: run.scriptText,
     scriptGenerated: run.scriptGenerated,
     scriptDocId: run.scriptDocId,
