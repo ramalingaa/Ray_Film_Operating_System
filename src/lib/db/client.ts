@@ -1,28 +1,73 @@
-import Database from "better-sqlite3";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+/**
+ * Database connection. Postgres everywhere:
+ * - DATABASE_URL set → that server (Supabase in production, via its pooler).
+ * - otherwise        → PGlite (Postgres compiled to WASM, in-process), on
+ *                      disk at DATABASE_PATH, or in memory for ":memory:".
+ * Same schema, same SQL dialect, same migrations in every case.
+ */
+import { migrate as migratePg } from "drizzle-orm/postgres-js/migrator";
+import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import fs from "node:fs";
 import path from "node:path";
 import * as schema from "./schema";
 
-export type Db = BetterSQLite3Database<typeof schema>;
+export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 const MIGRATIONS = path.join(process.cwd(), "src/lib/db/migrations");
 
-/** Open (and migrate) a database. Use ":memory:" in tests. */
-export function openDb(file = process.env.DATABASE_PATH ?? "data/reelgraph.db"): Db {
-  if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
-  const sqlite = new Database(file);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  const db = drizzle(sqlite, { schema });
-  migrate(db, { migrationsFolder: MIGRATIONS });
-  return db;
+export interface OpenOptions {
+  /** Apply pending migrations after connecting. */
+  migrate?: boolean;
 }
 
-let shared: Db | undefined;
-/** Process-wide connection for the Next.js server and scripts. */
-export function getDb(): Db {
-  shared ??= openDb();
+/** Where `openDb()` connects by default, for messages (never includes credentials). */
+export function describeTarget(target = defaultTarget()): string {
+  if (target === ":memory:") return "in-memory PGlite";
+  if (/^postgres(ql)?:\/\//.test(target)) {
+    const u = new URL(target);
+    return `Postgres at ${u.hostname}:${u.port || 5432}${u.pathname}`;
+  }
+  return `PGlite at ${target}`;
+}
+
+function defaultTarget(): string {
+  return process.env.DATABASE_URL || process.env.DATABASE_PATH || "data/pglite";
+}
+
+/**
+ * Open a database. Pass a postgres:// URL, a PGlite directory, or ":memory:".
+ * PGlite databases are always migrated (they are local and single-process).
+ */
+export async function openDb(target = defaultTarget(), opts: OpenOptions = {}): Promise<Db> {
+  if (/^postgres(ql)?:\/\//.test(target)) {
+    const { default: postgres } = await import("postgres");
+    const { drizzle } = await import("drizzle-orm/postgres-js");
+    // prepare:false is required behind Supabase's transaction pooler (port 6543).
+    const client = postgres(target, { prepare: false, max: Number(process.env.DATABASE_POOL_MAX ?? 5), onnotice: () => {} });
+    const db = drizzle(client, { schema });
+    if (opts.migrate) await migratePg(db, { migrationsFolder: MIGRATIONS });
+    return db as unknown as Db;
+  }
+
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle } = await import("drizzle-orm/pglite");
+  if (target !== ":memory:") fs.mkdirSync(target, { recursive: true });
+  const client = target === ":memory:" ? new PGlite() : new PGlite(target);
+  const db = drizzle(client, { schema });
+  await migratePglite(db, { migrationsFolder: MIGRATIONS });
+  return db as unknown as Db;
+}
+
+let shared: Promise<Db> | undefined;
+/**
+ * Process-wide connection for the Next.js server and scripts. The server does
+ * not migrate a remote database; run `npm run db:migrate` once per schema change.
+ */
+export function getDb(): Promise<Db> {
+  shared ??= openDb().catch((err) => {
+    shared = undefined; // let the next request retry
+    throw err;
+  });
   return shared;
 }

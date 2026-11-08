@@ -14,8 +14,9 @@ call.
 
 ```bash
 npm install
-cp .env.example .env    # add the key(s) for the models you route to
+cp .env.example .env    # add DATABASE_URL and the key(s) for the models you route to
 npm test
+npm run db:migrate      # create the tables (Postgres, or local PGlite if DATABASE_URL is unset)
 npm run ingest          # parse + extract data/script.fountain and the sheets
 npm run checks          # run the 8 continuity checks
 npm run dev             # http://localhost:3000
@@ -31,12 +32,29 @@ deterministic checks work, and the app tells you which steps were skipped.
 | `npm run impact -- --script edited.fountain` | Save an edited script as the next version and print what it touches |
 | `npm run impact -- --from 1 --to 2` | Compare any two stored versions |
 | `npm run eval` | Score the checks against 20 planted errors in `data/eval/` |
-| `npm run typecheck` / `npm test` | Types and the 90-test suite |
+| `npm run typecheck` / `npm test` | Types and the 91-test suite |
 
 Add `--no-models` to any command to skip model calls.
 
+## Deploying on Vercel
+
+Set these environment variables in the Vercel project:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase **transaction pooler** string (port 6543), with the password URL-encoded (`@` → `%40`) |
+| `OPEN_ROUTER_LLM_KEY` | your OpenRouter key |
+| `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY` | optional; without them an OpenRouter key routes both roles to the free-first default |
+
+Run `npm run db:migrate` once from your machine (with the same `DATABASE_URL`)
+before the first deploy and after any schema change. Functions run in `sin1`
+to sit next to the database. Then open **Load script** in the app to upload a
+screenplay, or load the bundled sample.
+
 ## The app
 
+- **Load script**: upload a Fountain screenplay and optional costume and
+  location sheets, or load the sample. Extraction and every check run on upload.
 - **Review**: the script with line numbers next to the findings, grouped by
   severity. Click a finding to see the conflict in plain language and the exact
   lines it comes from. Dismiss it as intentional (with a reason) or flag it for

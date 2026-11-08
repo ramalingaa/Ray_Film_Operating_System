@@ -88,7 +88,7 @@ export const candidateJudge: Agent<JudgeInput, Decision> = {
 
     for (const model of specs) {
       const key = verdictKey(model, check.id, prompt);
-      const cached = ctx.db.select().from(llmCache).where(eq(llmCache.key, key)).get();
+      const [cached] = await ctx.db.select().from(llmCache).where(eq(llmCache.key, key));
       const parsedCache = cached ? VerdictSchema.safeParse(JSON.parse(cached.responseJson)) : undefined;
       if (parsedCache?.success) {
         votes.push({ ...parsedCache.data, model });
@@ -96,14 +96,13 @@ export const candidateJudge: Agent<JudgeInput, Decision> = {
         try {
           const r = await ctx.gateway.generateWith(model, { system: JUDGE_SYSTEM, user: prompt, schema: VerdictSchema, schemaName: "verdict", maxTokens: 2000 });
           anyLive = true;
-          ctx.db
+          await ctx.db
             .insert(llmCache)
             .values({ key, model, promptVersion: JUDGE_PROMPT_VERSION, responseJson: JSON.stringify(r.data) })
-            .onConflictDoUpdate({ target: llmCache.key, set: { responseJson: JSON.stringify(r.data) } })
-            .run();
+            .onConflictDoUpdate({ target: llmCache.key, set: { responseJson: JSON.stringify(r.data) } });
           votes.push({ ...r.data, model });
         } catch (err) {
-          ctx.ledger.issue("judge", "warning", `${check.id} ${candidate.sceneNumbers.join(",")}`, `${model} gave no verdict: ${err instanceof Error ? err.message : String(err)}`);
+          await ctx.ledger.issue("judge", "warning", `${check.id} ${candidate.sceneNumbers.join(",")}`, `${model} gave no verdict: ${err instanceof Error ? err.message : String(err)}`);
           continue;
         }
       }
@@ -111,7 +110,7 @@ export const candidateJudge: Agent<JudgeInput, Decision> = {
     }
     if (votes.length === 0) throw new Error(`no judge model returned a verdict for ${check.id} [${candidate.sceneNumbers.join(",")}]`);
     if (settings.policy === "unanimous" && votes.length < specs.length) {
-      ctx.ledger.issue("judge", "warning", `${check.id} ${candidate.sceneNumbers.join(",")}`, `only ${votes.length} of ${specs.length} judges answered; unanimity is over those that did`);
+      await ctx.ledger.issue("judge", "warning", `${check.id} ${candidate.sceneNumbers.join(",")}`, `only ${votes.length} of ${specs.length} judges answered; unanimity is over those that did`);
     }
     return { output: decide(votes, settings), outcome: { model: votes.map((v) => v.model).join("+"), cacheHit: !anyLive } };
   },

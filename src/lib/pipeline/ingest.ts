@@ -7,7 +7,7 @@
  * item, skipped scene, or ambiguity becomes a pipeline issue.
  */
 import crypto from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { runAgent, type AgentContext } from "../agents/runtime";
 import type { Db } from "../db/client";
 import { documents, entities, entityMerges, facts, scenes } from "../db/schema";
@@ -58,20 +58,16 @@ export interface IngestReport {
 const hash = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 /** Same content → same document (derived rows rebuilt). New content → new version. */
-function upsertDocument(db: Db, kind: DocKind, file: SourceFile): { id: number; version: number } {
+async function upsertDocument(db: Db, kind: DocKind, file: SourceFile): Promise<{ id: number; version: number }> {
   const contentHash = hash(file.text);
-  const latest = db.select().from(documents).where(eq(documents.name, file.name)).orderBy(desc(documents.version)).limit(1).get();
+  const [latest] = await db.select().from(documents).where(eq(documents.name, file.name)).orderBy(desc(documents.version)).limit(1);
   if (latest && latest.contentHash === contentHash && latest.kind === kind) {
-    db.delete(facts).where(eq(facts.sourceDocId, latest.id)).run();
-    db.delete(scenes).where(eq(scenes.docId, latest.id)).run();
+    await db.delete(facts).where(eq(facts.sourceDocId, latest.id));
+    await db.delete(scenes).where(eq(scenes.docId, latest.id));
     return { id: latest.id, version: latest.version };
   }
   const version = (latest?.version ?? 0) + 1;
-  const row = db
-    .insert(documents)
-    .values({ kind, name: file.name, version, rawText: file.text, contentHash })
-    .returning({ id: documents.id })
-    .get();
+  const [row] = await db.insert(documents).values({ kind, name: file.name, version, rawText: file.text, contentHash }).returning({ id: documents.id });
   return { id: row.id, version };
 }
 
@@ -132,65 +128,81 @@ function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what:
   };
 }
 
+/**
+ * Entity ids by kind and canonical name. `ensure` creates (or finds) entities
+ * in bulk up front, so that `id` is a plain synchronous lookup while facts are built.
+ */
 class EntityStore {
   private readonly ids = new Map<string, number>();
   constructor(private readonly db: Db) {}
 
-  id(kind: EntityKind, canonical: string): number {
-    const key = `${kind}\u0000${canonical}`;
-    const known = this.ids.get(key);
-    if (known) return known;
-    const existing = this.db
-      .select({ id: entities.id })
+  private static key(kind: EntityKind, canonical: string): string {
+    return `${kind}\u0000${canonical}`;
+  }
+
+  async ensure(kind: EntityKind, names: Iterable<string>): Promise<void> {
+    const missing = [...new Set(names)].filter((n) => !this.ids.has(EntityStore.key(kind, n)));
+    if (missing.length === 0) return;
+    await this.db
+      .insert(entities)
+      .values(missing.map((canonicalName) => ({ kind, canonicalName })))
+      .onConflictDoNothing({ target: [entities.kind, entities.canonicalName] });
+    const rows = await this.db
+      .select({ id: entities.id, name: entities.canonicalName })
       .from(entities)
-      .where(and(eq(entities.kind, kind), eq(entities.canonicalName, canonical)))
-      .get();
-    const id = existing?.id ?? this.db.insert(entities).values({ kind, canonicalName: canonical }).returning({ id: entities.id }).get().id;
-    this.ids.set(key, id);
+      .where(and(eq(entities.kind, kind), inArray(entities.canonicalName, missing)));
+    for (const r of rows) this.ids.set(EntityStore.key(kind, r.name), r.id);
+  }
+
+  id(kind: EntityKind, canonical: string): number {
+    const id = this.ids.get(EntityStore.key(kind, canonical));
+    if (id === undefined) throw new Error(`entity ${kind} "${canonical}" was not prepared before use`);
     return id;
   }
 
-  recordMerges(kind: EntityKind, merges: Merge[]): void {
+  async recordMerges(kind: EntityKind, merges: Merge[]): Promise<void> {
+    await this.ensure(kind, merges.map((m) => m.canonical));
     for (const m of merges) {
       const entityId = this.id(kind, m.canonical);
-      const row = this.db.select().from(entities).where(eq(entities.id, entityId)).get()!;
+      const [row] = await this.db.select().from(entities).where(eq(entities.id, entityId));
       const aliases = new Set<string>(JSON.parse(row.aliasesJson));
       if (aliases.has(m.alias)) continue;
       aliases.add(m.alias);
-      this.db.update(entities).set({ aliasesJson: JSON.stringify([...aliases].sort()) }).where(eq(entities.id, entityId)).run();
-      this.db.insert(entityMerges).values({ entityId, alias: m.alias, rule: m.rule }).run();
+      await this.db.update(entities).set({ aliasesJson: JSON.stringify([...aliases].sort()) }).where(eq(entities.id, entityId));
+      await this.db.insert(entityMerges).values({ entityId, alias: m.alias, rule: m.rule });
     }
   }
 }
 
 export async function ingest(ctx: AgentContext, input: IngestInput): Promise<IngestReport> {
   const { db, ledger } = ctx;
-  const script = upsertDocument(db, "script", input.script);
-  const costumeDoc = input.costumes ? upsertDocument(db, "costume_sheet", input.costumes) : undefined;
-  const locationDoc = input.locations ? upsertDocument(db, "location_sheet", input.locations) : undefined;
+  const script = await upsertDocument(db, "script", input.script);
+  const costumeDoc = input.costumes ? await upsertDocument(db, "costume_sheet", input.costumes) : undefined;
+  const locationDoc = input.locations ? await upsertDocument(db, "location_sheet", input.locations) : undefined;
 
   const parsed = parseFountain(input.script.text);
-  if (parsed.scenes.length === 0) ledger.issue("parse", "error", input.script.name, "no scene headings found");
+  if (parsed.scenes.length === 0) await ledger.issue("parse", "error", input.script.name, "no scene headings found");
 
   let costumeRows: CostumeRow[] = [];
   let locationRows: LocationRow[] = [];
   try {
     if (input.costumes) costumeRows = parseCostumeSheet(input.costumes.text);
   } catch (err) {
-    ledger.issue("sheets", "error", input.costumes!.name, (err as Error).message);
+    await ledger.issue("sheets", "error", input.costumes!.name, (err as Error).message);
   }
   try {
     if (input.locations) locationRows = parseLocationSheet(input.locations.text);
   } catch (err) {
-    ledger.issue("sheets", "error", input.locations!.name, (err as Error).message);
+    await ledger.issue("sheets", "error", input.locations!.name, (err as Error).message);
   }
 
   const sceneIds = new Map<number, number>();
-  for (const s of parsed.scenes) {
-    const row = db
-      .insert(scenes)
-      .values({
-        docId: script.id,
+  const sceneRows = parsed.scenes.length
+    ? await db
+        .insert(scenes)
+        .values(
+          parsed.scenes.map((s) => ({
+            docId: script.id,
         ordinal: s.ordinal,
         number: s.number,
         heading: s.heading,
@@ -202,11 +214,11 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
         endLine: s.endLine,
         text: s.text,
         textHash: hash(s.text),
-      })
-      .returning({ id: scenes.id })
-      .get();
-    sceneIds.set(s.ordinal, row.id);
-  }
+          })),
+        )
+        .returning({ id: scenes.id, ordinal: scenes.ordinal })
+    : [];
+  for (const r of sceneRows) sceneIds.set(r.ordinal, r.id);
 
   // --- Model extraction, one scene at a time with a rolling summary ---------
   const extractions = new Map<number, { x: SceneExtraction; model: string }>();
@@ -225,7 +237,7 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
   });
 
   if (!ctx.gateway) {
-    ledger.issue("extract", "warning", input.script.name, "no model configured: only deterministic facts (cues, headings, explicit days, sheets) were extracted");
+    await ledger.issue("extract", "warning", input.script.name, "no model configured: only deterministic facts (cues, headings, explicit days, sheets) were extracted");
   }
   for (const scene of parsed.scenes) {
     let x: SceneExtraction | undefined;
@@ -234,10 +246,10 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
       const summary = buildSummary(done, (o) => days.find((d) => d.ordinal === o)?.day ?? null);
       try {
         const out = await runAgent(sceneExtractor, { scene, summary, title: parsed.titlePage.title }, ctx, `${input.script.name}#scene-${scene.number}`);
-        x = verifyExtraction(scene, out.extraction, (what, reason) => {
-          droppedItems++;
-          ledger.issue("verify", "warning", `scene ${scene.number}`, `dropped ${what}: ${reason}`);
-        });
+        const drops: string[] = [];
+        x = verifyExtraction(scene, out.extraction, (what, reason) => drops.push(`dropped ${what}: ${reason}`));
+        droppedItems += drops.length;
+        for (const d of drops) await ledger.issue("verify", "warning", `scene ${scene.number}`, d);
         extractions.set(scene.ordinal, { x, model: out.model });
         extractedScenes++;
         if (out.cacheHit) cachedScenes++;
@@ -269,24 +281,30 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
   const props = resolveProps(propNames);
   const locs = resolveLocations(parsed.scenes.map((s) => s.location), locationRows);
   const store = new EntityStore(db);
-  store.recordMerges("character", chars.merges);
-  store.recordMerges("prop", props.merges);
-  store.recordMerges("location", locs.merges);
-  for (const a of [...chars.ambiguous, ...props.ambiguous]) {
-    ledger.issue("resolve", "info", a.name, `left unmerged: matches ${a.candidates.join(", ")}`);
-  }
-  const charId = (raw: string) => {
+  await store.recordMerges("character", chars.merges);
+  await store.recordMerges("prop", props.merges);
+  await store.recordMerges("location", locs.merges);
+  const canonicalChar = (raw: string) => {
     const n = normalizeCharacterName(raw);
-    return store.id("character", chars.map.get(n) ?? n);
+    return chars.map.get(n) ?? n;
   };
-  const propId = (raw: string) => {
+  const canonicalProp = (raw: string) => {
     const n = normalizePropName(raw);
-    return store.id("prop", props.map.get(n) ?? n);
+    return props.map.get(n) ?? n;
   };
-  const locId = (raw: string) => {
+  const canonicalLoc = (raw: string) => {
     const n = normalizeLocationName(raw);
-    return store.id("location", locs.map.get(n) ?? n);
+    return locs.map.get(n) ?? n;
   };
+  await store.ensure("character", [...characterNames].map(canonicalChar));
+  await store.ensure("prop", [...propNames].map(canonicalProp));
+  await store.ensure("location", [...parsed.scenes.map((s) => canonicalLoc(s.location)), ...locationRows.map((r) => normalizeLocationName(r.name))]);
+  for (const a of [...chars.ambiguous, ...props.ambiguous]) {
+    await ledger.issue("resolve", "info", a.name, `left unmerged: matches ${a.candidates.join(", ")}`);
+  }
+  const charId = (raw: string) => store.id("character", canonicalChar(raw));
+  const propId = (raw: string) => store.id("prop", canonicalProp(raw));
+  const locId = (raw: string) => store.id("location", canonicalLoc(raw));
 
   const days = resolveStoryDays(evidence);
   const dayOf = new Map(days.map((d) => [d.ordinal, d]));
@@ -400,8 +418,8 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
     }
   }
 
-  db.transaction((tx) => {
-    for (let i = 0; i < rows.length; i += 200) tx.insert(facts).values(rows.slice(i, i + 200)).run();
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < rows.length; i += 200) await tx.insert(facts).values(rows.slice(i, i + 200));
   });
 
   return {

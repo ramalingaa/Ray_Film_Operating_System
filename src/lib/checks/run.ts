@@ -35,7 +35,7 @@ export interface CheckRunSummary {
  */
 export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = {}): Promise<CheckRunSummary> {
   const checks = opts.checks ?? CHECKS;
-  const state = loadState(db, docId);
+  const state = await loadState(db, docId);
   const drafts: FindingDraft[] = [];
   const failedChecks: CheckRunSummary["failedChecks"] = [];
   const judgeStats = { candidates: 0, accepted: 0, rejected: 0, unjudged: 0, skipped: false };
@@ -74,11 +74,11 @@ export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = 
     }
   }
   if (judgeStats.skipped && opts.judgeCtx) {
-    opts.judgeCtx.ledger.issue("checks", "warning", `doc ${docId}`, `${judgeStats.unjudged} candidate conflicts were not judged: no judge model configured`);
+    await opts.judgeCtx.ledger.issue("checks", "warning", `doc ${docId}`, `${judgeStats.unjudged} candidate conflicts were not judged: no judge model configured`);
   }
 
-  const dismissed = new Set(db.select({ s: dismissals.findingSignature }).from(dismissals).all().map((r) => r.s));
-  const previous = new Map(db.select({ s: findings.signature, status: findings.status }).from(findings).where(eq(findings.docId, docId)).all().map((r) => [r.s, r.status]));
+  const dismissed = new Set((await db.select({ s: dismissals.findingSignature }).from(dismissals)).map((r) => r.s));
+  const previous = new Map((await db.select({ s: findings.signature, status: findings.status }).from(findings).where(eq(findings.docId, docId))).map((r) => [r.s, r.status]));
 
   const seen = new Set<string>();
   const rows = drafts.flatMap((d) => {
@@ -101,9 +101,9 @@ export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = 
     ];
   });
 
-  db.transaction((tx) => {
-    tx.delete(findings).where(eq(findings.docId, docId)).run();
-    for (const r of rows) tx.insert(findings).values(r).run();
+  await db.transaction(async (tx) => {
+    await tx.delete(findings).where(eq(findings.docId, docId));
+    if (rows.length) await tx.insert(findings).values(rows);
   });
 
   const byCheck: Record<string, number> = {};

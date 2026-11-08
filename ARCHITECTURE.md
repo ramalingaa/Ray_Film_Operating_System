@@ -49,7 +49,7 @@ depends on: generated material is only as useful as our ability to check it.
 │ Model gateway             provider adapters, role routing, fallback,  │
 │                           ensembles, schema validation, response cache│
 ├──────────────────────────────────────────────────────────────────────┤
-│ Story graph (SQLite)      documents · scenes · entities · facts ·     │
+│ Story graph (Postgres)    documents · scenes · entities · facts ·     │
 │                           findings · dismissals · runs · issues       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -78,15 +78,18 @@ A property graph stored in relational tables:
 - **Operational:** `llm_cache`, `agent_runs`, `pipeline_issues`,
   `entity_merges` (audit of every alias folded into a canonical entity).
 
-**Why SQLite and not a graph database (yet).** The traversals we need
+**Why Postgres and not a graph database (yet).** The traversals we need
 (scene → entity → later scenes → sheet rows) are two or three hops and run
-fine as indexed joins or recursive CTEs. SQLite gives transactions, zero ops,
-and file-level versioning for a local proof of concept. All graph access goes
-through query functions in `src/lib/db/`, so moving to Postgres (with
-`pgvector` for semantic search over facts) or adding Neo4j/Memgraph for deep
-traversals is a storage swap, not a rewrite. We revisit this when we need
-multi-user collaboration, or traversals deeper than about four hops across
-many films.
+fine as indexed joins or recursive CTEs. Production uses Supabase Postgres
+through its transaction pooler (`DATABASE_URL`). Without `DATABASE_URL`, the
+same schema and migrations run on PGlite (Postgres compiled to WASM,
+in-process): in memory for tests, on disk under `data/pglite` for offline
+work. One SQL dialect everywhere. Row-level security is enabled on every
+table with no policies, so Supabase's public REST API cannot read or write
+them; only the server's own connection can. `pgvector` for semantic search
+over facts is available on the same database, and Neo4j/Memgraph for deep
+traversals remains a storage addition, not a rewrite. We revisit this when
+traversals go deeper than about four hops across many films.
 
 ## 4. Model gateway
 

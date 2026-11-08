@@ -34,13 +34,13 @@ export const sceneExtractor: Agent<SceneExtractionInput, SceneExtractionOutput> 
     const models = ctx.gateway.specs("extract");
     const key = extractionCacheKey(scene.text, models);
 
-    const cached = ctx.db.select().from(llmCache).where(eq(llmCache.key, key)).get();
+    const [cached] = await ctx.db.select().from(llmCache).where(eq(llmCache.key, key));
     if (cached) {
       const parsed = SceneExtractionSchema.safeParse(JSON.parse(cached.responseJson));
       if (parsed.success) {
         return { output: { extraction: parsed.data, model: cached.model, cacheHit: true }, outcome: { model: cached.model, cacheHit: true } };
       }
-      ctx.ledger.issue("scene-extractor", "warning", `scene ${scene.number}`, "cached extraction no longer matches the schema; re-extracting");
+      await ctx.ledger.issue("scene-extractor", "warning", `scene ${scene.number}`, "cached extraction no longer matches the schema; re-extracting");
     }
 
     const result = await ctx.gateway.generate("extract", {
@@ -51,14 +51,13 @@ export const sceneExtractor: Agent<SceneExtractionInput, SceneExtractionOutput> 
       maxTokens: 8000,
     });
     for (const a of result.attempts.filter((a) => a.outcome !== "ok")) {
-      ctx.ledger.issue("scene-extractor", "warning", `scene ${scene.number}`, `${a.model}: ${a.outcome} (${a.message})`);
+      await ctx.ledger.issue("scene-extractor", "warning", `scene ${scene.number}`, `${a.model}: ${a.outcome} (${a.message})`);
     }
 
-    ctx.db
+    await ctx.db
       .insert(llmCache)
       .values({ key, model: result.model, promptVersion: PROMPT_VERSION, responseJson: JSON.stringify(result.data) })
-      .onConflictDoUpdate({ target: llmCache.key, set: { model: result.model, responseJson: JSON.stringify(result.data) } })
-      .run();
+      .onConflictDoUpdate({ target: llmCache.key, set: { model: result.model, responseJson: JSON.stringify(result.data) } });
 
     return {
       output: { extraction: result.data, model: result.model, cacheHit: false },

@@ -16,9 +16,9 @@ export default function Home() {
 
 async function Review() {
   await connection();
-  const db = getDb();
-  const doc = latestScript(db);
-  const data = doc && loadReview(db, doc.id);
+  const db = await getDb();
+  const doc = await latestScript(db);
+  const data = doc && (await loadReview(db, doc.id));
   if (!data) return <EmptyState />;
 
   const open = data.findings.filter((f) => f.status === "open").length;

@@ -18,7 +18,7 @@ const sheets = {
 
 /** A store with the clean script ingested and checked, and an extractor that knows the edited scene 4. */
 async function setup() {
-  const db = openDb(":memory:");
+  const db = await openDb(":memory:");
   const edited: ScenePlan = { ...CLEAN_PLAN, "4": { costumes: [["DANIEL", "torn suit jacket", "torn"], ["MAYA", "yellow raincoat"]] } };
   const editedText = clean.replace("Maya, still in her green raincoat, floors it.", "Maya, still in her yellow raincoat, floors it.");
   const cleanModel = planExtractor(CLEAN_PLAN, clean);
@@ -83,7 +83,7 @@ describe("change impact", () => {
     expect(r.scenes).toEqual([{ number: "10", heading: "EXT. LIGHTHOUSE - NIGHT", kind: "removed" }]);
     expect(r.summary).toContain("You removed scene 10.");
 
-    const reverse = computeImpact(s.db, r.to.id, s.baseId);
+    const reverse = (await computeImpact(s.db, r.to.id, s.baseId));
     expect(reverse.scenes).toEqual([{ number: "10", heading: "EXT. LIGHTHOUSE - NIGHT", kind: "added" }]);
   });
 
@@ -108,7 +108,7 @@ describe("change impact", () => {
 
   it("says so when nothing changed", async () => {
     const s = await setup();
-    const r = computeImpact(s.db, s.baseId, s.baseId);
+    const r = (await computeImpact(s.db, s.baseId, s.baseId));
     expect(r.summary).toBe("No changes between version 1 and version 1.");
   });
 });

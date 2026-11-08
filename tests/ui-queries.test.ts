@@ -9,7 +9,7 @@ import { ingest } from "@/lib/pipeline/ingest";
 import { latestScript, loadHealth, loadReadiness, loadReview } from "@/lib/ui/queries";
 
 async function seededDb() {
-  const db = openDb(":memory:");
+  const db = await openDb(":memory:");
   const r = await ingest(
     { db, ledger: new Ledger(db) },
     {
@@ -25,8 +25,8 @@ async function seededDb() {
 describe("UI queries", () => {
   it("loads scenes and findings with resolved source lines, most severe first", async () => {
     const { db, docId } = await seededDb();
-    expect(latestScript(db)?.id).toBe(docId);
-    const review = loadReview(db, docId)!;
+    expect((await latestScript(db))?.id).toBe(docId);
+    const review = (await loadReview(db, docId))!;
     expect(review.scenes).toHaveLength(10);
     expect(review.scenes[0].lines[0]).toBe("EXT. DOCKS - NIGHT");
     expect(review.findings.map((f) => f.severity)).toEqual(["high", "high", "medium"]);
@@ -40,19 +40,19 @@ describe("UI queries", () => {
 
   it("reports readiness by severity and check, and shows dismissal reasons", async () => {
     const { db, docId } = await seededDb();
-    const f = db.select().from(findings).where(eq(findings.checkId, "location_consistency")).get()!;
-    db.insert(dismissals).values({ findingSignature: f.signature, reason: "renamed on purpose" }).run();
+    const f = (await db.select().from(findings).where(eq(findings.checkId, "location_consistency")))[0]!;
+    await db.insert(dismissals).values({ findingSignature: f.signature, reason: "renamed on purpose" });
     await runChecks(db, docId);
 
-    const r = loadReadiness(db, docId)!;
+    const r = (await loadReadiness(db, docId))!;
     expect(r.bySeverity.high).toEqual({ open: 2, followUp: 0, dismissed: 0 });
     expect(r.bySeverity.medium).toEqual({ open: 0, followUp: 0, dismissed: 1 });
     expect(r.byCheck.map((c) => c.checkId)).toEqual(["timeline_order", "location_consistency"]);
-    expect(loadReview(db, docId)!.findings.find((x) => x.checkId === "location_consistency")?.dismissReason).toBe("renamed on purpose");
+    expect((await loadReview(db, docId))!.findings.find((x) => x.checkId === "location_consistency")?.dismissReason).toBe("renamed on purpose");
   });
 
   it("surfaces pipeline issues", async () => {
     const { db } = await seededDb();
-    expect(loadHealth(db).issues.some((i) => i.message.includes("no model configured"))).toBe(true);
+    expect((await loadHealth(db)).issues.some((i) => i.message.includes("no model configured"))).toBe(true);
   });
 });

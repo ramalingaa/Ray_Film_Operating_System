@@ -5,6 +5,7 @@ const LINKS = [
   { href: "/readiness", label: "Readiness report" },
   { href: "/impact", label: "Impact" },
   { href: "/issues", label: "Pipeline health" },
+  { href: "/load", label: "Load script" },
   ...(process.env.NODE_ENV !== "production" ? [{ href: "/eval", label: "Eval" }] : []),
 ];
 
@@ -30,8 +31,11 @@ export function EmptyState() {
     <div className="mx-auto max-w-lg p-10 text-center">
       <h1 className="mb-2 text-xl font-semibold">No script loaded yet</h1>
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Run <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">npm run ingest</code> and then{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">npm run checks</code>, then reload this page.
+        <Link href="/load" className="underline">
+          Load a script
+        </Link>{" "}
+        in the browser, or run <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">npm run ingest</code> and then{" "}
+        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">npm run checks</code>.
       </p>
     </div>
   );

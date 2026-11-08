@@ -11,6 +11,9 @@ import { latestScript } from "@/lib/ui/queries";
 
 type Search = Promise<Record<string, string | string[] | undefined>>;
 
+/** Server actions on this page re-read edited scenes with a model, which can take minutes. */
+export const maxDuration = 300;
+
 export default function ImpactPage({ searchParams }: { searchParams: Search }) {
   return (
     <Suspense fallback={<Loading />}>
@@ -21,11 +24,11 @@ export default function ImpactPage({ searchParams }: { searchParams: Search }) {
 
 async function Impact({ searchParams }: { searchParams: Search }) {
   await connection();
-  const db = getDb();
-  const latest = latestScript(db);
+  const db = await getDb();
+  const latest = await latestScript(db);
   if (!latest) return <EmptyState />;
 
-  const versions = db.select().from(documents).where(eq(documents.name, latest.name)).orderBy(desc(documents.version)).all();
+  const versions = await db.select().from(documents).where(eq(documents.name, latest.name)).orderBy(desc(documents.version));
   const sp = await searchParams;
   const from = Number(sp.from);
   const to = Number(sp.to);
@@ -33,12 +36,12 @@ async function Impact({ searchParams }: { searchParams: Search }) {
   let error: string | undefined;
   if (from && to) {
     try {
-      report = computeImpact(db, from, to);
+      report = await computeImpact(db, from, to);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     }
   }
-  const sceneRows = db.select().from(scenes).where(eq(scenes.docId, latest.id)).orderBy(scenes.ordinal).all();
+  const sceneRows = await db.select().from(scenes).where(eq(scenes.docId, latest.id)).orderBy(scenes.ordinal);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">

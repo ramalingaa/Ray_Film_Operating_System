@@ -53,13 +53,13 @@ describe("judge agent", () => {
   }
 
   it("runs an ensemble, logs a judge that fails, and caches verdicts", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const models = { "x:a": judgeModel("x:a", { conflict: true, confidence: 0.9 }), "x:b": judgeModel("x:b", new Error("503")), "x:c": judgeModel("x:c", { conflict: true, confidence: 0.8 }) };
     const ctx = { db, ledger: new Ledger(db), gateway: new ModelGateway({ extract: [], judge: Object.keys(models) }, (s) => models[s as keyof typeof models]) };
     const d = await judge(ctx, check, candidate, { policy: "unanimous", threshold: 0.7 });
     expect(d).toMatchObject({ accepted: true, confidence: 0.8 });
     expect(d!.votes.map((v) => v.model)).toEqual(["x:a", "x:c"]);
-    const issues = db.select().from(pipelineIssues).all().map((i) => i.message);
+    const issues = (await db.select().from(pipelineIssues)).map((i) => i.message);
     expect(issues.some((m) => m.includes("x:b gave no verdict"))).toBe(true);
     expect(issues.some((m) => m.includes("only 2 of 3 judges answered"))).toBe(true);
 
@@ -68,10 +68,10 @@ describe("judge agent", () => {
   });
 
   it("returns undefined (and records it) when no judge answers", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const ctx = { db, ledger: new Ledger(db), gateway: new ModelGateway({ extract: [], judge: ["x:b"] }, () => judgeModel("x:b", new Error("down"))) };
     expect(await judge(ctx, check, candidate, { policy: "primary", threshold: 0.7 })).toBeUndefined();
-    expect(db.select().from(pipelineIssues).all().some((i) => i.severity === "error")).toBe(true);
+    expect((await db.select().from(pipelineIssues)).some((i) => i.severity === "error")).toBe(true);
   });
 });
 

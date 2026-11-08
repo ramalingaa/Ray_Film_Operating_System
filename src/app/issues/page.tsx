@@ -20,7 +20,7 @@ const TONE = {
 
 async function Health() {
   await connection();
-  const { issues, agents } = loadHealth(getDb());
+  const { issues, agents } = await loadHealth(await getDb());
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-8">
       <h1 className="mb-1 text-2xl font-semibold">Pipeline health</h1>

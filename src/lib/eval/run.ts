@@ -28,13 +28,8 @@ export interface EvalReport {
   judge: { models: string[]; policy: string; threshold: number; candidates: number; accepted: number; rejected: number; unjudged: number };
 }
 
-function findingsFor(db: Db, docId: number): ScoredFinding[] {
-  return db
-    .select()
-    .from(findings)
-    .where(eq(findings.docId, docId))
-    .all()
-    .map((f) => ({ checkId: f.checkId, sceneNumbers: JSON.parse(f.sceneNumbersJson) as string[], title: f.title }));
+async function findingsFor(db: Db, docId: number): Promise<ScoredFinding[]> {
+  return (await db.select().from(findings).where(eq(findings.docId, docId)).orderBy(findings.id)).map((f) => ({ checkId: f.checkId, sceneNumbers: JSON.parse(f.sceneNumbersJson) as string[], title: f.title }));
 }
 
 /** Ingest the clean and seeded scripts, run every check, and score the seeded findings. */
@@ -46,7 +41,7 @@ export async function runEval(
   checks: Check[] = CHECKS,
 ): Promise<EvalReport> {
   const ledger = new Ledger(db);
-  const issuesBefore = db.select({ id: pipelineIssues.id }).from(pipelineIssues).all().length;
+  const issuesBefore = await db.$count(pipelineIssues);
   const ctx = { db, ledger, gateway };
   const sheets = { costumes: input.costumes, locations: input.locations };
 
@@ -56,12 +51,14 @@ export async function runEval(
   const cleanRun = await runChecks(db, clean.scriptDocId, judged);
   const seededRun = await runChecks(db, seeded.scriptDocId, judged);
 
-  const cleanFindings = findingsFor(db, clean.scriptDocId);
+  const cleanFindings = await findingsFor(db, clean.scriptDocId);
+  const seededFindings = await findingsFor(db, seeded.scriptDocId);
+  const issuesAfter = await db.$count(pipelineIssues);
   return {
     ranAt: new Date().toISOString(),
     models: gateway ? gateway.specs("extract") : [],
     checks: checks.map((c) => c.id),
-    seeded: score(findingsFor(db, seeded.scriptDocId), input.manifest, checks.map((c) => c.id)),
+    seeded: score(seededFindings, input.manifest, checks.map((c) => c.id)),
     clean: { falseAlarms: cleanFindings.length, findings: cleanFindings },
     judge: {
       models: gateway ? gateway.specs("judge") : [],
@@ -75,7 +72,7 @@ export async function runEval(
     pipeline: {
       skippedScenes: clean.skippedScenes + seeded.skippedScenes,
       droppedItems: clean.droppedItems + seeded.droppedItems,
-      issues: db.select({ id: pipelineIssues.id }).from(pipelineIssues).all().length - issuesBefore,
+      issues: issuesAfter - issuesBefore,
     },
   };
 }

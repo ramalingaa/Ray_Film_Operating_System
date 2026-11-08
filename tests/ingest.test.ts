@@ -35,7 +35,7 @@ function model() {
 
 describe("ingest", () => {
   it("stores scenes, sheet facts and verified model facts with provenance", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const fake = model();
     const ctx = { db, ledger: new Ledger(db), gateway: new ModelGateway({ extract: ["fake:extractor"], judge: [] }, () => fake) };
     const report = await ingest(ctx, input);
@@ -43,7 +43,7 @@ describe("ingest", () => {
     expect(report).toMatchObject({ sceneCount: 10, extractedScenes: 10, cachedScenes: 0, skippedScenes: 0, droppedItems: 1 });
     expect(fake.calls).toBe(10);
 
-    const all = db.select().from(facts).all();
+    const all = (await db.select().from(facts));
     expect(all.length).toBe(report.factCount);
     for (const f of all) {
       expect(f.sourceLine).toBeGreaterThan(0);
@@ -51,7 +51,7 @@ describe("ingest", () => {
       expect(f.sourceSnippet.split(/\s+/).length).toBeLessThanOrEqual(25);
     }
     expect(all.some((f) => f.objectValue === "purple boots")).toBe(false);
-    const dropped = db.select().from(pipelineIssues).where(eq(pipelineIssues.stage, "verify")).all();
+    const dropped = (await db.select().from(pipelineIssues).where(eq(pipelineIssues.stage, "verify")));
     expect(dropped[0].message).toContain("purple boots");
 
     // The ledger line pointer was wrong (99) and got corrected to the real line.
@@ -59,35 +59,35 @@ describe("ingest", () => {
     expect(ash.sourceLine).toBe(109);
 
     // Entities: cue MAYA, model "Maya Reyes" and sheet MAYA REYES resolve to one person.
-    const maya = db.select().from(entities).where(eq(entities.canonicalName, "MAYA REYES")).get()!;
+    const maya = (await db.select().from(entities).where(eq(entities.canonicalName, "MAYA REYES")))[0]!;
     expect(JSON.parse(maya.aliasesJson)).toContain("MAYA");
-    expect(db.select().from(entityMerges).all().length).toBeGreaterThan(0);
+    expect((await db.select().from(entityMerges)).length).toBeGreaterThan(0);
 
     // Story days: day 1 until SUPER: DAY 2, flashback unknown.
-    const days = db.select().from(facts).where(eq(facts.kind, "story_day")).all().map((f) => f.objectValue);
+    const days = (await db.select().from(facts).where(eq(facts.kind, "story_day"))).map((f) => f.objectValue);
     expect(days).toEqual(["1", "1", "1", "1", "1", "2", "unknown", "2", "2", "2"]);
   });
 
   it("re-running the same script costs zero model calls", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const fake = model();
     const ctx = { db, ledger: new Ledger(db), gateway: new ModelGateway({ extract: ["fake:extractor"], judge: [] }, () => fake) };
     await ingest(ctx, input);
-    const first = db.select().from(facts).all().length;
+    const first = (await db.select().from(facts)).length;
     fake.calls = 0;
     const again = await ingest(ctx, input);
     expect(fake.calls).toBe(0);
     expect(again.cachedScenes).toBe(10);
-    expect(db.select().from(facts).all().length).toBe(first);
-    expect(db.select().from(scenes).all().length).toBe(10);
+    expect((await db.select().from(facts)).length).toBe(first);
+    expect((await db.select().from(scenes)).length).toBe(10);
   });
 
   it("runs deterministic-only without a model and says so", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const report = await ingest({ db, ledger: new Ledger(db) }, input);
     expect(report.extractedScenes).toBe(0);
     expect(report.factCount).toBeGreaterThan(30);
-    const issues = db.select().from(pipelineIssues).all();
+    const issues = (await db.select().from(pipelineIssues));
     expect(issues.some((i) => i.message.includes("no model configured"))).toBe(true);
   });
 });

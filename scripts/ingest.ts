@@ -14,7 +14,7 @@ function arg(name: string, fallback: string): string {
 const read = (p: string) => ({ name: path.basename(p), text: fs.readFileSync(p, "utf8") });
 
 async function main() {
-  const db = openDb();
+  const db = await openDb(undefined, { migrate: true });
   const ledger = new Ledger(db);
   const gateway = gatewayFor(["extract"]);
   const ctx: AgentContext = { db, ledger, gateway };
@@ -37,7 +37,7 @@ async function main() {
   if (report.skippedScenes > 0 || report.droppedItems > 0) console.log("see pipeline_issues for details");
 }
 
-main().catch((err) => {
+main().then(() => process.exit(0)).catch((err) => {
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

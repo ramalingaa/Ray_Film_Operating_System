@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    // Each test file boots an in-process Postgres (PGlite), which takes a few seconds.
+    testTimeout: 30_000,
   },
 });

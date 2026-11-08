@@ -11,17 +11,17 @@
  * silently.
  */
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { boolean, doublePrecision, index, integer, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 const createdAt = () =>
   text("created_at")
     .notNull()
-    .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`);
+    .default(sql`to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`);
 
-export const documents = sqliteTable(
+export const documents = pgTable(
   "documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     kind: text("kind", { enum: ["script", "costume_sheet", "location_sheet"] }).notNull(),
     name: text("name").notNull(),
     version: integer("version").notNull(),
@@ -32,10 +32,10 @@ export const documents = sqliteTable(
   (t) => [uniqueIndex("documents_name_version").on(t.name, t.version)],
 );
 
-export const scenes = sqliteTable(
+export const scenes = pgTable(
   "scenes",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     docId: integer("doc_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
@@ -47,7 +47,7 @@ export const scenes = sqliteTable(
     intExt: text("int_ext").notNull(),
     locationRaw: text("location_raw").notNull(),
     timeOfDay: text("time_of_day").notNull(),
-    isFlashback: integer("is_flashback", { mode: "boolean" }).notNull().default(false),
+    isFlashback: boolean("is_flashback").notNull().default(false),
     startLine: integer("start_line").notNull(),
     endLine: integer("end_line").notNull(),
     text: text("text").notNull(),
@@ -56,10 +56,10 @@ export const scenes = sqliteTable(
   (t) => [index("scenes_doc").on(t.docId, t.ordinal)],
 );
 
-export const entities = sqliteTable(
+export const entities = pgTable(
   "entities",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     kind: text("kind", { enum: ["character", "location", "prop", "costume"] }).notNull(),
     canonicalName: text("canonical_name").notNull(),
     aliasesJson: text("aliases_json").notNull().default("[]"),
@@ -68,8 +68,8 @@ export const entities = sqliteTable(
 );
 
 /** Audit log for entity resolution: every alias that was folded into an entity. */
-export const entityMerges = sqliteTable("entity_merges", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const entityMerges = pgTable("entity_merges", {
+  id: serial("id").primaryKey(),
   entityId: integer("entity_id")
     .notNull()
     .references(() => entities.id, { onDelete: "cascade" }),
@@ -92,10 +92,10 @@ export const FACT_KINDS = [
 ] as const;
 export type FactKind = (typeof FACT_KINDS)[number];
 
-export const facts = sqliteTable(
+export const facts = pgTable(
   "facts",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     sceneId: integer("scene_id").references(() => scenes.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: FACT_KINDS }).notNull(),
     subjectEntityId: integer("subject_entity_id").references(() => entities.id),
@@ -109,7 +109,7 @@ export const facts = sqliteTable(
       .references(() => documents.id, { onDelete: "cascade" }),
     sourceLine: integer("source_line").notNull(),
     sourceSnippet: text("source_snippet").notNull(),
-    confidence: real("confidence").notNull(),
+    confidence: doublePrecision("confidence").notNull(),
     /** "parser" | "sheet" | "<provider>:<model>" */
     extractedBy: text("extracted_by").notNull(),
     extractedAt: createdAt(),
@@ -121,10 +121,10 @@ export const facts = sqliteTable(
   ],
 );
 
-export const findings = sqliteTable(
+export const findings = pgTable(
   "findings",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     docId: integer("doc_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
@@ -144,15 +144,15 @@ export const findings = sqliteTable(
   (t) => [index("findings_doc").on(t.docId), index("findings_sig").on(t.signature)],
 );
 
-export const dismissals = sqliteTable("dismissals", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const dismissals = pgTable("dismissals", {
+  id: serial("id").primaryKey(),
   findingSignature: text("finding_signature").notNull().unique(),
   reason: text("reason"),
   createdAt: createdAt(),
 });
 
 /** Model responses keyed by hash(scene text + prompt version + model). */
-export const llmCache = sqliteTable("llm_cache", {
+export const llmCache = pgTable("llm_cache", {
   key: text("key").primaryKey(),
   model: text("model").notNull(),
   promptVersion: text("prompt_version").notNull(),
@@ -160,13 +160,13 @@ export const llmCache = sqliteTable("llm_cache", {
   createdAt: createdAt(),
 });
 
-export const agentRuns = sqliteTable("agent_runs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const agentRuns = pgTable("agent_runs", {
+  id: serial("id").primaryKey(),
   agent: text("agent").notNull(),
   inputRef: text("input_ref").notNull(),
   status: text("status", { enum: ["running", "ok", "failed", "skipped"] }).notNull(),
   model: text("model"),
-  cacheHit: integer("cache_hit", { mode: "boolean" }).notNull().default(false),
+  cacheHit: boolean("cache_hit").notNull().default(false),
   inputTokens: integer("input_tokens"),
   outputTokens: integer("output_tokens"),
   error: text("error"),
@@ -175,8 +175,8 @@ export const agentRuns = sqliteTable("agent_runs", {
 });
 
 /** Anything a stage could not do cleanly. Surfaced in the UI, never swallowed. */
-export const pipelineIssues = sqliteTable("pipeline_issues", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const pipelineIssues = pgTable("pipeline_issues", {
+  id: serial("id").primaryKey(),
   stage: text("stage").notNull(),
   severity: text("severity", { enum: ["error", "warning", "info"] }).notNull(),
   ref: text("ref").notNull(),

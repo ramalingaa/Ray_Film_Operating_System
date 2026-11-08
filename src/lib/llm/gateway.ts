@@ -79,9 +79,18 @@ export function createAdapter(spec: string, env: Env = process.env): ModelAdapte
   });
 }
 
-/** Read role → model lists from env (MODEL_EXTRACT, MODEL_JUDGE). */
+/** Used when MODEL_EXTRACT / MODEL_JUDGE are unset and only an OpenRouter key is present. */
+export const DEFAULT_OPENROUTER_MODELS = "openrouter:nvidia/nemotron-3.5-super-vl:free,openrouter:deepseek/deepseek-v4.1-flash,openrouter:tencent/hy4";
+
+/**
+ * Read role → model lists from env (MODEL_EXTRACT, MODEL_JUDGE). Unset roles
+ * default to Anthropic when its key is set, else to OpenRouter when its key is
+ * set, else to Anthropic (which then reports the missing key).
+ */
 export function rolesFromEnv(env: Env = process.env): Record<Role, string[]> {
-  const fallback = `anthropic:${env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL}`;
+  const hasOpenRouter = !!(env.OPENROUTER_API_KEY?.trim() || env.OPEN_ROUTER_LLM_KEY?.trim());
+  const hasAnthropic = !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_PROFILE);
+  const fallback = !hasAnthropic && hasOpenRouter ? DEFAULT_OPENROUTER_MODELS : `anthropic:${env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL}`;
   const list = (v: string | undefined) =>
     (v || fallback)
       .split(",")

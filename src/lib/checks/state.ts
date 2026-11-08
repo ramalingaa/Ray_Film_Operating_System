@@ -4,25 +4,25 @@ import { documents, entities, facts, scenes } from "../db/schema";
 import type { BibleState, FactInfo, SceneInfo } from "./types";
 
 /** Latest version of each production sheet, used alongside a script version. */
-function latestSheetIds(db: Db): number[] {
+async function latestSheetIds(db: Db): Promise<number[]> {
   const ids: number[] = [];
   for (const kind of ["costume_sheet", "location_sheet"] as const) {
-    const row = db.select({ id: documents.id }).from(documents).where(eq(documents.kind, kind)).orderBy(desc(documents.version), desc(documents.id)).limit(1).get();
+    const [row] = await db.select({ id: documents.id }).from(documents).where(eq(documents.kind, kind)).orderBy(desc(documents.version), desc(documents.id)).limit(1);
     if (row) ids.push(row.id);
   }
   return ids;
 }
 
 /** Load the snapshot that checks run on: one script version plus the latest sheets. */
-export function loadState(db: Db, docId: number): BibleState {
-  const sheetIds = latestSheetIds(db);
-  const docNames = new Map(db.select({ id: documents.id, name: documents.name }).from(documents).all().map((d) => [d.id, d.name]));
+export async function loadState(db: Db, docId: number): Promise<BibleState> {
+  const sheetIds = await latestSheetIds(db);
+  const docNames = new Map((await db.select({ id: documents.id, name: documents.name }).from(documents)).map((d) => [d.id, d.name]));
 
-  const factRows = db
+  const factRows = await db
     .select()
     .from(facts)
     .where(or(eq(facts.sourceDocId, docId), sheetIds.length ? and(isNull(facts.sceneId), inArray(facts.sourceDocId, sheetIds)) : undefined))
-    .all();
+    .orderBy(facts.id);
 
   const factInfos: FactInfo[] = factRows.map((f) => ({
     id: f.id,
@@ -49,13 +49,7 @@ export function loadState(db: Db, docId: number): BibleState {
     if (f.kind === "located_at" && f.predicate === "scene_location" && f.subjectEntityId != null) locBySceneId.set(f.sceneId, f.subjectEntityId);
   }
 
-  const sceneInfos: SceneInfo[] = db
-    .select()
-    .from(scenes)
-    .where(eq(scenes.docId, docId))
-    .orderBy(scenes.ordinal)
-    .all()
-    .map((s) => {
+  const sceneInfos: SceneInfo[] = (await db.select().from(scenes).where(eq(scenes.docId, docId)).orderBy(scenes.ordinal)).map((s) => {
       const day = dayBySceneId.get(s.id);
       return {
         id: s.id,
@@ -71,6 +65,6 @@ export function loadState(db: Db, docId: number): BibleState {
       };
     });
 
-  const entityNames = new Map(db.select({ id: entities.id, name: entities.canonicalName }).from(entities).all().map((e) => [e.id, e.name]));
+  const entityNames = new Map((await db.select({ id: entities.id, name: entities.canonicalName }).from(entities)).map((e) => [e.id, e.name]));
   return { docId, scenes: sceneInfos, facts: factInfos, entityNames };
 }

@@ -84,31 +84,26 @@ function toChange(state: BibleState, { fact, scene }: { fact: FactInfo; scene: S
   };
 }
 
-function findingRefs(db: Db, docId: number): Map<string, FindingRef> {
+async function findingRefs(db: Db, docId: number): Promise<Map<string, FindingRef>> {
   return new Map(
-    db
-      .select()
-      .from(findings)
-      .where(eq(findings.docId, docId))
-      .all()
-      .map((f) => [f.signature, { checkId: f.checkId, severity: f.severity, title: f.title, sceneNumbers: JSON.parse(f.sceneNumbersJson) as string[] }]),
+    (await db.select().from(findings).where(eq(findings.docId, docId)).orderBy(findings.id)).map((f) => [f.signature, { checkId: f.checkId, severity: f.severity, title: f.title, sceneNumbers: JSON.parse(f.sceneNumbersJson) as string[] }]),
   );
 }
 
-function docRef(db: Db, id: number): DocRef {
-  const d = db.select().from(documents).where(eq(documents.id, id)).get();
+async function docRef(db: Db, id: number): Promise<DocRef> {
+  const [d] = await db.select().from(documents).where(eq(documents.id, id));
   if (!d) throw new Error(`document ${id} not found`);
   if (d.kind !== "script") throw new Error(`document ${id} is a ${d.kind}, not a script`);
   return { id: d.id, name: d.name, version: d.version };
 }
 
-export function computeImpact(db: Db, fromId: number, toId: number): ImpactReport {
-  const from = docRef(db, fromId);
-  const to = docRef(db, toId);
+export async function computeImpact(db: Db, fromId: number, toId: number): Promise<ImpactReport> {
+  const from = await docRef(db, fromId);
+  const to = await docRef(db, toId);
 
   // 1. Scenes, matched by scene number.
-  const oldScenes = new Map(db.select().from(scenes).where(eq(scenes.docId, fromId)).all().map((s) => [s.number, s]));
-  const newScenes = new Map(db.select().from(scenes).where(eq(scenes.docId, toId)).all().map((s) => [s.number, s]));
+  const oldScenes = new Map((await db.select().from(scenes).where(eq(scenes.docId, fromId)).orderBy(scenes.ordinal)).map((s) => [s.number, s]));
+  const newScenes = new Map((await db.select().from(scenes).where(eq(scenes.docId, toId)).orderBy(scenes.ordinal)).map((s) => [s.number, s]));
   const sceneChanges: SceneChange[] = [];
   for (const [n, s] of newScenes) {
     const old = oldScenes.get(n);
@@ -120,8 +115,8 @@ export function computeImpact(db: Db, fromId: number, toId: number): ImpactRepor
   sceneChanges.sort((a, b) => ordinalOf(a.number) - ordinalOf(b.number));
 
   // 2. Facts (content only; story-day moves are reported as day shifts).
-  const oldState = loadState(db, fromId);
-  const newState = loadState(db, toId);
+  const oldState = await loadState(db, fromId);
+  const newState = await loadState(db, toId);
   const oldFacts = sceneFacts(oldState);
   const newFacts = sceneFacts(newState);
   const added = [...newFacts].filter(([k]) => !oldFacts.has(k)).map(([, v]) => v);
@@ -236,8 +231,8 @@ export function computeImpact(db: Db, fromId: number, toId: number): ImpactRepor
   }
 
   // 4. Findings, by signature.
-  const oldFindings = findingRefs(db, fromId);
-  const newFindings = findingRefs(db, toId);
+  const oldFindings = await findingRefs(db, fromId);
+  const newFindings = await findingRefs(db, toId);
   const addedFindings = [...newFindings].filter(([s]) => !oldFindings.has(s)).map(([, f]) => f);
   const resolved = [...oldFindings].filter(([s]) => !newFindings.has(s)).map(([, f]) => f);
   const unchanged = [...newFindings.keys()].filter((s) => oldFindings.has(s)).length;

@@ -31,15 +31,15 @@ function print(r: ImpactReport) {
 }
 
 async function main() {
-  const db = openDb();
+  const db = await openDb(undefined, { migrate: true });
   const from = arg("from");
   const to = arg("to");
-  if (from && to) return print(computeImpact(db, Number(from), Number(to)));
+  if (from && to) return print(await computeImpact(db, Number(from), Number(to)));
 
   const script = arg("script");
   if (!script) throw new Error("usage: npm run impact -- --script edited.fountain [--base script.fountain]  |  --from <docId> --to <docId>");
   const baseName = arg("base") ?? "script.fountain";
-  const base = db.select().from(documents).where(eq(documents.name, baseName)).orderBy(desc(documents.version)).limit(1).get();
+  const [base] = await db.select().from(documents).where(eq(documents.name, baseName)).orderBy(desc(documents.version)).limit(1);
   if (!base) throw new Error(`no ingested script named ${baseName}; run npm run ingest first`);
 
   const gateway = gatewayFor(["extract", "judge"]);
@@ -48,7 +48,7 @@ async function main() {
   console.log(`\nmodel extraction: ${r.modelCalls.extractedScenes} scene(s) re-extracted, ${r.modelCalls.cachedScenes} from cache`);
 }
 
-main().catch((err) => {
+main().then(() => process.exit(0)).catch((err) => {
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

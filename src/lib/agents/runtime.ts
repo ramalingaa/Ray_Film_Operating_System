@@ -20,13 +20,13 @@ export interface RunOutcome {
 export class Ledger {
   constructor(private readonly db: Db) {}
 
-  start(agent: string, inputRef: string): number {
-    const row = this.db.insert(agentRuns).values({ agent, inputRef, status: "running" }).returning({ id: agentRuns.id }).get();
+  async start(agent: string, inputRef: string): Promise<number> {
+    const [row] = await this.db.insert(agentRuns).values({ agent, inputRef, status: "running" }).returning({ id: agentRuns.id });
     return row.id;
   }
 
-  finish(runId: number, status: "ok" | "failed" | "skipped", outcome: RunOutcome = {}, error?: string): void {
-    this.db
+  async finish(runId: number, status: "ok" | "failed" | "skipped", outcome: RunOutcome = {}, error?: string): Promise<void> {
+    await this.db
       .update(agentRuns)
       .set({
         status,
@@ -37,12 +37,11 @@ export class Ledger {
         error,
         finishedAt: new Date().toISOString(),
       })
-      .where(eq(agentRuns.id, runId))
-      .run();
+      .where(eq(agentRuns.id, runId));
   }
 
-  issue(stage: string, severity: IssueSeverity, ref: string, message: string): void {
-    this.db.insert(pipelineIssues).values({ stage, severity, ref, message }).run();
+  async issue(stage: string, severity: IssueSeverity, ref: string, message: string): Promise<void> {
+    await this.db.insert(pipelineIssues).values({ stage, severity, ref, message });
   }
 }
 
@@ -69,15 +68,15 @@ export interface Agent<I, O> {
  * plus an error issue, then rethrown so the orchestrator decides what to do.
  */
 export async function runAgent<I, O>(agent: Agent<I, O>, input: I, ctx: AgentContext, inputRef: string): Promise<O> {
-  const runId = ctx.ledger.start(`${agent.name}@${agent.version}`, inputRef);
+  const runId = await ctx.ledger.start(`${agent.name}@${agent.version}`, inputRef);
   try {
     const { output, outcome } = await agent.run(input, ctx);
-    ctx.ledger.finish(runId, "ok", outcome);
+    await ctx.ledger.finish(runId, "ok", outcome);
     return output;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    ctx.ledger.finish(runId, "failed", {}, message);
-    ctx.ledger.issue(agent.name, "error", inputRef, message);
+    await ctx.ledger.finish(runId, "failed", {}, message);
+    await ctx.ledger.issue(agent.name, "error", inputRef, message);
     throw err;
   }
 }

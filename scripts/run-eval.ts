@@ -12,7 +12,8 @@ const read = (p: string) => ({ name: path.basename(p), text: fs.readFileSync(p, 
 async function main() {
   // A separate database, so eval runs never mix with the working story bible.
   // The model response cache lives in it too, so re-runs are free.
-  const db = openDb(process.env.EVAL_DATABASE_PATH ?? "data/eval/eval.db");
+  // Always a local PGlite database unless EVAL_DATABASE_URL points elsewhere.
+  const db = await openDb(process.env.EVAL_DATABASE_URL ?? "data/eval/pglite", { migrate: true });
 
   const gateway = gatewayFor(["extract", "judge"]);
 
@@ -29,7 +30,7 @@ async function main() {
   console.log("\nwritten to data/eval/last_run.json");
 }
 
-main().catch((err) => {
+main().then(() => process.exit(0)).catch((err) => {
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

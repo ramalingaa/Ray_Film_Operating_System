@@ -48,3 +48,5 @@ next-env.d.ts
 !.env.example
 /data/eval/*.db
 /data/eval/*.db-*
+/data/pglite/
+/data/eval/pglite/

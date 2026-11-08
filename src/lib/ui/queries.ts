@@ -45,24 +45,25 @@ export interface ReviewData {
   openIssues: number;
 }
 
-export function latestScript(db: Db) {
-  return db.select().from(documents).where(eq(documents.kind, "script")).orderBy(desc(documents.id)).limit(1).get();
+export async function latestScript(db: Db) {
+  const [doc] = await db.select().from(documents).where(eq(documents.kind, "script")).orderBy(desc(documents.id)).limit(1);
+  return doc;
 }
 
-export function loadReview(db: Db, docId: number): ReviewData | undefined {
-  const doc = db.select().from(documents).where(eq(documents.id, docId)).get();
+export async function loadReview(db: Db, docId: number): Promise<ReviewData | undefined> {
+  const [doc] = await db.select().from(documents).where(eq(documents.id, docId));
   if (!doc) return undefined;
 
-  const sceneRows = db.select().from(scenes).where(eq(scenes.docId, docId)).orderBy(scenes.ordinal).all();
-  const findingRows = db.select().from(findings).where(eq(findings.docId, docId)).all();
+  const sceneRows = await db.select().from(scenes).where(eq(scenes.docId, docId)).orderBy(scenes.ordinal);
+  const findingRows = await db.select().from(findings).where(eq(findings.docId, docId)).orderBy(findings.id);
   const factIds = [...new Set(findingRows.flatMap((f) => JSON.parse(f.factIdsJson) as number[]))];
-  const factRows = factIds.length ? db.select().from(facts).where(inArray(facts.id, factIds)).all() : [];
+  const factRows = factIds.length ? await db.select().from(facts).where(inArray(facts.id, factIds)) : [];
   const docIds = [...new Set(factRows.map((f) => f.sourceDocId))];
   const docs = new Map(
-    (docIds.length ? db.select().from(documents).where(inArray(documents.id, docIds)).all() : []).map((d) => [d.id, { ...d, lines: d.rawText.replace(/\r\n?/g, "\n").split("\n") }]),
+    (docIds.length ? await db.select().from(documents).where(inArray(documents.id, docIds)) : []).map((d) => [d.id, { ...d, lines: d.rawText.replace(/\r\n?/g, "\n").split("\n") }]),
   );
   const factById = new Map(factRows.map((f) => [f.id, f]));
-  const reasons = new Map(db.select().from(dismissals).all().map((d) => [d.findingSignature, d.reason]));
+  const reasons = new Map((await db.select().from(dismissals)).map((d) => [d.findingSignature, d.reason]));
 
   const severityRank: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
   const views: FindingView[] = findingRows
@@ -89,7 +90,7 @@ export function loadReview(db: Db, docId: number): ReviewData | undefined {
     doc: { id: doc.id, name: doc.name, version: doc.version, createdAt: doc.createdAt },
     scenes: sceneRows.map((s) => ({ number: s.number, heading: s.heading, startLine: s.startLine, lines: s.text.split("\n"), isFlashback: s.isFlashback })),
     findings: views,
-    openIssues: db.select({ id: pipelineIssues.id }).from(pipelineIssues).where(inArray(pipelineIssues.severity, ["error", "warning"])).all().length,
+    openIssues: await db.$count(pipelineIssues, inArray(pipelineIssues.severity, ["error", "warning"])),
   };
 }
 
@@ -102,8 +103,8 @@ export interface Readiness {
   followUp: FindingView[];
 }
 
-export function loadReadiness(db: Db, docId: number): Readiness | undefined {
-  const review = loadReview(db, docId);
+export async function loadReadiness(db: Db, docId: number): Promise<Readiness | undefined> {
+  const review = await loadReview(db, docId);
   if (!review) return undefined;
   const bySeverity: Readiness["bySeverity"] = {
     high: { open: 0, followUp: 0, dismissed: 0 },
@@ -128,9 +129,9 @@ export function loadReadiness(db: Db, docId: number): Readiness | undefined {
   };
 }
 
-export function loadHealth(db: Db) {
-  const issues = db.select().from(pipelineIssues).orderBy(desc(pipelineIssues.id)).limit(300).all();
-  const runs = db.select().from(agentRuns).all();
+export async function loadHealth(db: Db) {
+  const issues = await db.select().from(pipelineIssues).orderBy(desc(pipelineIssues.id)).limit(300);
+  const runs = await db.select().from(agentRuns).orderBy(agentRuns.id);
   const byAgent = new Map<string, { ok: number; failed: number; cached: number; inputTokens: number; outputTokens: number }>();
   for (const r of runs) {
     const a = byAgent.get(r.agent) ?? { ok: 0, failed: 0, cached: 0, inputTokens: 0, outputTokens: 0 };

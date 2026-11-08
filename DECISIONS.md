@@ -59,7 +59,7 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 15. **Eval matching is one-to-one and greedy**: largest scene overlap first,
     required checks before optional ones. Errors whose check is not
     implemented yet are reported as out of scope rather than counted as misses.
-16. **Eval uses its own database** (`data/eval/eval.db`, gitignored), so eval
+16. **Eval uses its own database** (local PGlite in `data/eval/pglite`, gitignored), so eval
     runs never mix with the working story bible. Model responses are cached
     there too, so re-running the eval is free.
 17. **The harness test drives a scripted fake extractor** that returns what a
@@ -93,7 +93,7 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 24. **Dismissing or flagging applies to the finding's signature**, so the same
     conflict stays dismissed in later versions of the script and after
     re-runs. Reopening removes the dismissal.
-25. **Pages read SQLite at request time** (`connection()` inside `<Suspense>`),
+25. **Pages read the database at request time** (`connection()` inside `<Suspense>`),
     as required with Cache Components enabled. Mutations are server actions
     that call `refresh()`.
 26. **The eval page exists only outside production** (`notFound()` when
@@ -129,3 +129,24 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     `nvidia/nemotron-3.5-super-vl:free` (50 free requests/day), then
     `deepseek/deepseek-v4.1-flash`, then `tencent/hy4` as paid fallbacks.
     With credit, put a stronger judge first and use `JUDGE_POLICY=majority`.
+34. **Postgres replaces SQLite** so the app can run on Vercel, whose file
+    system is read-only and not shared between instances. Supabase is
+    reached through its transaction pooler (port 6543, `prepare: false`),
+    because the direct `db.<ref>.supabase.co` host is IPv6-only and Vercel
+    functions connect over IPv4. Tests and offline runs use PGlite with the
+    same migrations. Queries that relied on SQLite's implicit insertion order
+    now say `ORDER BY` explicitly.
+35. **The web server never migrates a remote database.** Run
+    `npm run db:migrate` (or any CLI command, which migrates first) after a
+    schema change. This keeps concurrent cold starts from racing on DDL.
+36. **Row-level security on every table, no policies.** Supabase exposes the
+    `public` schema through its REST API to anyone with the publishable key.
+    With RLS on and no policies, that API sees nothing. The app connects as
+    the table owner and is unaffected.
+37. **Vercel functions run in `sin1` (Singapore)**, next to the Supabase
+    project in `ap-southeast-1`, because ingest makes many sequential
+    queries. Loading a script happens in the browser on `/load`; its server
+    actions may run for up to 300 seconds (the Hobby-plan ceiling).
+38. **With no `MODEL_EXTRACT` / `MODEL_JUDGE` set, an OpenRouter key alone is
+    enough:** both roles default to the free-first OpenRouter list. An
+    Anthropic key, if present, still takes precedence.

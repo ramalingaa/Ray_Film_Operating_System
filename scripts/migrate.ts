@@ -1,4 +1,13 @@
-import { openDb } from "@/lib/db/client";
+import "./env";
+import { describeTarget, openDb } from "@/lib/db/client";
 
-openDb();
-console.log("database migrated:", process.env.DATABASE_PATH ?? "data/reelgraph.db");
+async function main() {
+  await openDb(undefined, { migrate: true });
+  console.log("database migrated:", describeTarget());
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});

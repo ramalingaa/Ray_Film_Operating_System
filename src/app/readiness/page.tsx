@@ -15,9 +15,9 @@ export default function ReadinessPage() {
 
 async function Report() {
   await connection();
-  const db = getDb();
-  const doc = latestScript(db);
-  const r = doc && loadReadiness(db, doc.id);
+  const db = await getDb();
+  const doc = await latestScript(db);
+  const r = doc && (await loadReadiness(db, doc.id));
   if (!r) return <EmptyState />;
 
   const totals = (["high", "medium", "low"] as const).map((s) => ({ s, ...r.bySeverity[s] }));

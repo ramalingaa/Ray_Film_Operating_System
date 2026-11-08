@@ -96,7 +96,7 @@ function planGateway(judgeAnswer?: (prompt: string) => { conflict: boolean; conf
 describe("runEval", () => {
   it("without a judge: deterministic checks catch every error they own, with no false alarms", async () => {
     const { gateway } = planGateway();
-    const report = await runEval(openDb(":memory:"), gateway, evalInput());
+    const report = await runEval(await openDb(":memory:"), gateway, evalInput());
 
     expect(report.checks).toEqual(CHECKS.map((c) => c.id));
     expect(report.clean.falseAlarms).toBe(0);
@@ -110,7 +110,7 @@ describe("runEval", () => {
 
   it("candidate generation reaches every planted error (a judge that always agrees gets full recall)", async () => {
     const { gateway, judged } = planGateway(() => ({ conflict: true, confidence: 0.9, reason: "stand-in" }));
-    const report = await runEval(openDb(":memory:"), gateway, evalInput());
+    const report = await runEval(await openDb(":memory:"), gateway, evalInput());
     expect(report.seeded.missed.map((e) => e.id)).toEqual([]);
     expect(report.seeded.recall).toBe(1);
     // The noise budget the real judge has to filter: candidates raised on the clean script.
@@ -119,7 +119,7 @@ describe("runEval", () => {
   });
 
   it("a judge that rejects everything adds no findings, and verdicts are cached", async () => {
-    const db = openDb(":memory:");
+    const db = await openDb(":memory:");
     const first = planGateway(() => ({ conflict: false, confidence: 0.9, reason: "not a conflict" }));
     const r1 = await runEval(db, first.gateway, evalInput());
     expect(r1.judge.accepted).toBe(0);
