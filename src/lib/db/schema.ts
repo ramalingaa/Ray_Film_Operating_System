@@ -183,3 +183,51 @@ export const pipelineIssues = pgTable("pipeline_issues", {
   message: text("message").notNull(),
   createdAt: createdAt(),
 });
+
+export const RUN_STAGES = ["intake", "story", "continuity", "breakdown", "locations", "schedule", "budget"] as const;
+export type RunStage = (typeof RUN_STAGES)[number];
+
+/**
+ * One pass of an input (screenplay or story) through the pipeline. Work
+ * advances in short steps; `lockedUntil` (epoch ms) keeps two callers from
+ * stepping the same run at once.
+ */
+export const runs = pgTable("runs", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  inputKind: text("input_kind", { enum: ["screenplay", "story"] }).notNull(),
+  sourceName: text("source_name").notNull(),
+  inputText: text("input_text").notNull(),
+  /** The Fountain text the later stages read (the input itself, or the generated outline for a story). */
+  scriptText: text("script_text"),
+  scriptGenerated: boolean("script_generated").notNull().default(false),
+  scriptDocId: integer("script_doc_id").references(() => documents.id, { onDelete: "set null" }),
+  costumesName: text("costumes_name"),
+  costumesText: text("costumes_text"),
+  locationsName: text("locations_name"),
+  locationsText: text("locations_text"),
+  status: text("status", { enum: ["queued", "running", "done", "failed"] }).notNull().default("queued"),
+  lockedUntil: doublePrecision("locked_until"),
+  createdAt: createdAt(),
+  updatedAt: text("updated_at"),
+});
+
+export const runStages = pgTable(
+  "run_stages",
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    stage: text("stage", { enum: RUN_STAGES }).notNull(),
+    ordinal: integer("ordinal").notNull(),
+    status: text("status", { enum: ["pending", "running", "done", "failed"] }).notNull().default("pending"),
+    /** Human-readable progress while running, e.g. "read 6 of 10 scenes". */
+    progress: text("progress"),
+    reportJson: text("report_json"),
+    error: text("error"),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [uniqueIndex("run_stages_run_stage").on(t.runId, t.stage)],
+);

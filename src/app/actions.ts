@@ -5,14 +5,14 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { Ledger } from "@/lib/agents/runtime";
 import { judgeSettingsFromEnv } from "@/lib/checks/judge";
 import { getDb } from "@/lib/db/client";
 import { dismissals, findings } from "@/lib/db/schema";
 import { applySceneEdit, applyScriptEdit } from "@/lib/impact/apply";
 import { availableGateway } from "@/lib/llm/available";
-import { runChecks } from "@/lib/checks/run";
-import { ingest, type IngestInput } from "@/lib/pipeline/ingest";
+import { createRun, retryRun, stepRun, type StepOutcome } from "@/lib/pipeline/runs";
 
 async function findingById(id: number) {
   const [f] = await (await getDb()).select().from(findings).where(eq(findings.id, id));
@@ -76,7 +76,7 @@ export async function editSceneText(formData: FormData) {
   redirect(`/impact?from=${r.from.id}&to=${r.to.id}`);
 }
 
-// ---- loading a project ----------------------------------------------------------
+// ---- runs: upload or paste, then step through the stages -------------------------
 
 async function fileText(formData: FormData, name: string): Promise<{ name: string; text: string } | undefined> {
   const f = formData.get(name);
@@ -84,22 +84,48 @@ async function fileText(formData: FormData, name: string): Promise<{ name: strin
   return { name: f.name, text: await f.text() };
 }
 
-async function ingestAndCheck(input: IngestInput) {
-  const { ctx, judgeSettings } = await impactContext();
-  const report = await ingest(ctx, input);
-  await runChecks(ctx.db, report.scriptDocId, { judgeCtx: ctx, judgeSettings });
-  redirect("/");
+/** Start a run from an uploaded file or pasted text (a screenplay or a story), then open it. */
+export async function startRun(formData: FormData) {
+  const file = await fileText(formData, "file");
+  const pasted = String(formData.get("text") ?? "");
+  const input = file ?? (pasted.trim() ? { name: "pasted text", text: pasted } : undefined);
+  if (!input) throw new Error("Upload a file or paste a script or story.");
+  const id = await createRun(await getDb(), {
+    title: String(formData.get("title") ?? ""),
+    sourceName: input.name,
+    text: input.text,
+    costumes: await fileText(formData, "costumes"),
+    locations: await fileText(formData, "locations"),
+  });
+  kickOff(id);
+  redirect(`/runs/${id}`);
 }
 
-/** Ingest an uploaded script (and optional sheets), run every check, and open the review. */
-export async function loadProject(formData: FormData) {
-  const script = await fileText(formData, "script");
-  if (!script) throw new Error("choose a .fountain file to upload");
-  await ingestAndCheck({ script, costumes: await fileText(formData, "costumes"), locations: await fileText(formData, "locations") });
-}
-
-/** Ingest the sample script and sheets shipped in data/. */
-export async function loadSampleProject() {
+/** Start a run on the sample screenplay and sheets shipped in data/. */
+export async function startSampleRun() {
   const read = (file: string) => ({ name: file, text: fs.readFileSync(path.join(process.cwd(), "data", file), "utf8") });
-  await ingestAndCheck({ script: read("script.fountain"), costumes: read("costumes.csv"), locations: read("locations.csv") });
+  const script = read("script.fountain");
+  const id = await createRun(await getDb(), { sourceName: script.name, text: script.text, costumes: read("costumes.csv"), locations: read("locations.csv") });
+  kickOff(id);
+  redirect(`/runs/${id}`);
+}
+
+/**
+ * Take the first step on the server right after the response, so a run moves
+ * even before the run page starts stepping it. Stage errors are recorded on
+ * the run; anything else is logged.
+ */
+function kickOff(runId: number) {
+  after(() => advanceRun(runId).catch((err) => console.error(`run ${runId}: first step failed:`, err)));
+}
+
+/** Advance a run by one step (called repeatedly by the run page while it is open). */
+export async function advanceRun(runId: number): Promise<StepOutcome> {
+  const db = await getDb();
+  return stepRun(db, runId, { gateway: availableGateway(["extract", "judge"]).gateway, judgeSettings: judgeSettingsFromEnv() });
+}
+
+export async function retryFailedRun(formData: FormData) {
+  await retryRun(await getDb(), Number(formData.get("id")));
+  refresh();
 }

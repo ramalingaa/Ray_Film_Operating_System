@@ -54,3 +54,41 @@ export function judgeUserPrompt(question: string, evidence: string): string {
 Evidence:
 ${evidence}`;
 }
+
+// ---- Adaptation: story → scene outline ------------------------------------------
+
+/** Bump whenever the adaptation prompt changes: it is part of the adaptation cache key. */
+export const ADAPT_PROMPT_VERSION = "adapt-v1";
+
+export const ADAPT_SYSTEM = `You are a development executive turning a prose story, treatment or logline into a scene-by-scene screenplay outline for pre-production planning.
+
+Rules:
+- Follow the story as written. Do not add characters, locations, events or subplots that the text does not support. If the text is only a logline, keep the outline short (a handful of scenes) rather than inventing detail.
+- One entry per scene: a single location at a single time. A new place or a jump in time is a new scene.
+- int_ext: INT, EXT or INT/EXT. location: a short set name in capitals (e.g. HARBOR OFFICE). time_of_day: DAY, NIGHT, DAWN, DUSK, MORNING, EVENING, or CONTINUOUS.
+- action: one to four short present-tense paragraphs describing only what is seen and heard. Write a character's name in CAPITALS the first time they appear in the whole outline. Include costumes, props, vehicles, animals, weather and effects only when the story mentions them.
+- No dialogue unless the story quotes it.
+- source_excerpt: exact words copied from the story (at most 25 words) that this scene is based on.`;
+
+export function adaptUserPrompt(title: string, story: string): string {
+  return `Title: ${title}\n\nStory:\n${story}\n\nWrite the scene outline.`;
+}
+
+// ---- Story analysis ----------------------------------------------------------------
+
+/** Bump whenever the story-analysis prompt changes: it is part of the story cache key. */
+export const STORY_PROMPT_VERSION = "story-v1";
+
+export const STORY_SYSTEM = `You are a story analyst giving a producer an honest structural read of a screenplay, using Blake Snyder's 15-beat structure as a reference, not a rule.
+
+You see the whole screenplay with line numbers. Report:
+1. Logline elements: the protagonist, what they want (goal), what happens if they fail (stakes), and what stands in the way. Use null for anything the script does not make clear, and list it in "missing".
+2. Beats: for each of the 15 beats, the scene that delivers it, or scene_number null if no scene does. Do not force a beat onto a scene that does not deliver it.
+3. Scene cards: for every scene, its purpose in the story, the conflict in it, the value or situation at the start and at the end, and whether the scene turns (the situation is meaningfully different at the end). A scene that only repeats information or mood does not turn.
+4. Setups: objects, facts or promises the script plants that the audience will expect to pay off, and the scene where each pays off (or null if it never does).
+
+Every item needs source_line (the number in the left margin) and source_snippet (exact words copied from that line, at most 25 words). Be specific and brief. Describe; do not rewrite the script.`;
+
+export function storyUserPrompt(title: string, numberedScript: string): string {
+  return `Screenplay: ${title}\n\n${numberedScript}\n\nGive the structural read.`;
+}

@@ -150,3 +150,26 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 38. **With no `MODEL_EXTRACT` / `MODEL_JUDGE` set, an OpenRouter key alone is
     enough:** both roles default to the free-first OpenRouter list. An
     Anthropic key, if present, still takes precedence.
+39. **Screenplay or story is decided by code.** Two or more Fountain scene
+    headings, or one heading with dialogue, means a screenplay; anything else
+    is a story. Final Draft (`.fdx`) is converted to Fountain by code.
+    PDF and Word import are not supported yet: text extraction from PDFs loses
+    screenplay layout and needs its own careful parser.
+40. **A story becomes a generated scene outline**, not a full screenplay. The
+    Adaptation agent returns structured scenes (heading parts, action, a quoted
+    story excerpt); code renders the Fountain. No invented dialogue. Scenes
+    whose excerpt is not in the story are reported. The outline is labelled
+    generated wherever it appears.
+41. **Runs advance in steps driven by the run page** (and a first step started
+    on the server with `after()`), each within a 200-second budget, under a
+    lease so only one step works on a run at a time. No queue service yet:
+    closing the page pauses a run, reopening resumes it. Extraction and judge
+    answers are cached, so resuming never repeats a model call.
+42. **A run's script is stored under its title** (`<title-slug>.fountain`).
+    Re-running the same title with changed text creates the next version, so
+    the Impact page can compare drafts across runs.
+43. **Page lengths are estimates** from Fountain (about 55 lines per page,
+    action wrapped at 60 characters, dialogue at 35), shown in eighths and
+    labelled as estimates. One page ≈ one minute of screen time.
+44. **The old Load page is replaced by the Analyze home page**; the
+    latest-script review moved to `/review`.

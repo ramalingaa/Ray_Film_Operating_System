@@ -17,6 +17,8 @@ export interface RunChecksOptions {
   /** Needed for judged checks. Without it, only their deterministic parts run. */
   judgeCtx?: AgentContext;
   judgeSettings?: JudgeSettings;
+  /** Epoch ms. After this, remaining candidates are left unjudged (counted as deferred); run again to continue. */
+  deadline?: number;
 }
 
 export interface CheckRunSummary {
@@ -26,7 +28,7 @@ export interface CheckRunSummary {
   followUp: number;
   byCheck: Record<string, number>;
   failedChecks: { id: string; error: string }[];
-  judge: { candidates: number; accepted: number; rejected: number; unjudged: number; skipped: boolean };
+  judge: { candidates: number; accepted: number; rejected: number; unjudged: number; deferred: number; skipped: boolean };
 }
 
 /**
@@ -38,7 +40,7 @@ export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = 
   const state = await loadState(db, docId);
   const drafts: FindingDraft[] = [];
   const failedChecks: CheckRunSummary["failedChecks"] = [];
-  const judgeStats = { candidates: 0, accepted: 0, rejected: 0, unjudged: 0, skipped: false };
+  const judgeStats = { candidates: 0, accepted: 0, rejected: 0, unjudged: 0, deferred: 0, skipped: false };
   const canJudge = !!opts.judgeCtx?.gateway && !!opts.judgeSettings;
 
   for (const check of checks) {
@@ -56,6 +58,10 @@ export async function runChecks(db: Db, docId: number, opts: RunChecksOptions = 
         continue;
       }
       for (const c of candidates) {
+        if (opts.deadline !== undefined && Date.now() > opts.deadline) {
+          judgeStats.deferred++;
+          continue;
+        }
         const d = await judge(opts.judgeCtx!, check, c, opts.judgeSettings!);
         if (!d) {
           judgeStats.unjudged++;

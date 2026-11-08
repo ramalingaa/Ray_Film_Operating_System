@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Agent } from "../agents/runtime";
+import type { Db } from "../db/client";
 import { llmCache } from "../db/schema";
 import { numberedSceneText, type ParsedScene } from "../fountain";
 import { EXTRACTION_SYSTEM, extractionUserPrompt, PROMPT_VERSION } from "./prompts";
@@ -23,6 +24,12 @@ export function extractionCacheKey(sceneText: string, models: string[]): string 
     .createHash("sha256")
     .update(`${PROMPT_VERSION}\u0000${models.join(",")}\u0000${sceneText}`)
     .digest("hex");
+}
+
+/** True when this scene's extraction is already cached (no model call needed). */
+export async function isExtractionCached(db: Db, sceneText: string, models: string[]): Promise<boolean> {
+  const [row] = await db.select({ key: llmCache.key }).from(llmCache).where(eq(llmCache.key, extractionCacheKey(sceneText, models)));
+  return !!row;
 }
 
 /** Reads one scene and returns validated continuity facts. Cached per (scene text, prompt version, model list). */

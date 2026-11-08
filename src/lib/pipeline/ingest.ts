@@ -11,7 +11,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { runAgent, type AgentContext } from "../agents/runtime";
 import type { Db } from "../db/client";
 import { documents, entities, entityMerges, facts, scenes } from "../db/schema";
-import { sceneExtractor } from "../extract/agent";
+import { isExtractionCached, sceneExtractor } from "../extract/agent";
 import {
   normalizeCharacterName,
   normalizeLocationName,
@@ -52,7 +52,14 @@ export interface IngestReport {
   extractedScenes: number;
   cachedScenes: number;
   skippedScenes: number;
+  /** Scenes not read yet because the time budget ran out; call ingest again to continue. */
+  deferredScenes: number;
   droppedItems: number;
+}
+
+export interface IngestOptions {
+  /** Epoch ms. After this, scenes that would need a new model call are deferred. */
+  deadline?: number;
 }
 
 const hash = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
@@ -174,7 +181,7 @@ class EntityStore {
   }
 }
 
-export async function ingest(ctx: AgentContext, input: IngestInput): Promise<IngestReport> {
+export async function ingest(ctx: AgentContext, input: IngestInput, opts: IngestOptions = {}): Promise<IngestReport> {
   const { db, ledger } = ctx;
   const script = await upsertDocument(db, "script", input.script);
   const costumeDoc = input.costumes ? await upsertDocument(db, "costume_sheet", input.costumes) : undefined;
@@ -225,6 +232,7 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
   let extractedScenes = 0;
   let cachedScenes = 0;
   let skippedScenes = 0;
+  let deferredScenes = 0;
   let droppedItems = 0;
   const done: { scene: ParsedScene; x?: SceneExtraction }[] = [];
   const evidence: DayEvidence[] = [];
@@ -241,6 +249,15 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
   }
   for (const scene of parsed.scenes) {
     let x: SceneExtraction | undefined;
+    if (ctx.gateway && (deferredScenes > 0 || (opts.deadline !== undefined && Date.now() > opts.deadline))) {
+      // Out of time: keep order (later scenes need earlier summaries), so defer this and every later uncached scene.
+      if (deferredScenes > 0 || !(await isExtractionCached(db, scene.text, ctx.gateway.specs("extract")))) {
+        deferredScenes++;
+        done.push({ scene, x });
+        evidence.push(dayEvidence(scene, x));
+        continue;
+      }
+    }
     if (ctx.gateway) {
       const days = resolveStoryDays(evidence);
       const summary = buildSummary(done, (o) => days.find((d) => d.ordinal === o)?.day ?? null);
@@ -432,6 +449,7 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
     extractedScenes,
     cachedScenes,
     skippedScenes,
+    deferredScenes,
     droppedItems,
   };
 }
