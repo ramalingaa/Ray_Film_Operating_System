@@ -88,3 +88,13 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     previous described scene at that place.
 22. **Extraction prompt v2** adds `location_details` (physical facts about a
     place). This bumps `PROMPT_VERSION`, which invalidates cached extractions.
+23. **The UI shows the most recently ingested script** (highest document id).
+    Picking a script or version in the UI is part of M7 (change impact).
+24. **Dismissing or flagging applies to the finding's signature**, so the same
+    conflict stays dismissed in later versions of the script and after
+    re-runs. Reopening removes the dismissal.
+25. **Pages read SQLite at request time** (`connection()` inside `<Suspense>`),
+    as required with Cache Components enabled. Mutations are server actions
+    that call `refresh()`.
+26. **The eval page exists only outside production** (`notFound()` when
+    `NODE_ENV=production`), per the spec's "dev only".

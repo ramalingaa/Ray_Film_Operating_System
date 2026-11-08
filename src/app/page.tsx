@@ -1,10 +1,43 @@
+import { Suspense } from "react";
+import Link from "next/link";
+import { connection } from "next/server";
+import { EmptyState, Loading } from "@/components/nav";
+import { ScriptReview } from "@/components/script-review";
+import { getDb } from "@/lib/db/client";
+import { latestScript, loadReview } from "@/lib/ui/queries";
+
 export default function Home() {
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold">ReelGraph</h1>
-      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-        Story bible and continuity checker. Run <code>npm run ingest</code> to load a script.
-      </p>
-    </main>
+    <Suspense fallback={<Loading />}>
+      <Review />
+    </Suspense>
+  );
+}
+
+async function Review() {
+  await connection();
+  const db = getDb();
+  const doc = latestScript(db);
+  const data = doc && loadReview(db, doc.id);
+  if (!data) return <EmptyState />;
+
+  const open = data.findings.filter((f) => f.status === "open").length;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-zinc-200 px-4 py-2 text-sm dark:border-zinc-800">
+        <span className="font-medium">
+          {data.doc.name} <span className="text-zinc-500">version {data.doc.version}</span>
+        </span>
+        <span className="text-zinc-500">
+          {data.scenes.length} scenes · {open} conflicts to review · click a conflict to see where it comes from
+        </span>
+        {data.openIssues > 0 && (
+          <Link href="/issues" className="ml-auto text-amber-700 underline dark:text-amber-400">
+            {data.openIssues} pipeline warnings
+          </Link>
+        )}
+      </div>
+      <ScriptReview scenes={data.scenes} findings={data.findings} />
+    </div>
   );
 }
