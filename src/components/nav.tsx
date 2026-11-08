@@ -3,6 +3,7 @@ import Link from "next/link";
 const LINKS = [
   { href: "/", label: "Review" },
   { href: "/readiness", label: "Readiness report" },
+  { href: "/impact", label: "Impact" },
   { href: "/issues", label: "Pipeline health" },
   ...(process.env.NODE_ENV !== "production" ? [{ href: "/eval", label: "Eval" }] : []),
 ];

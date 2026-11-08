@@ -98,3 +98,16 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     that call `refresh()`.
 26. **The eval page exists only outside production** (`notFound()` when
     `NODE_ENV=production`), per the spec's "dev only".
+27. **Change impact matches scenes by scene number.** Inserting a scene without
+    explicit `#n#` numbers renumbers every later scene, which then shows as
+    changed. Use Fountain scene numbers for stable diffs across drafts.
+28. **Facts are compared by content** (kind, subject, predicate, value,
+    scene), not by story day. Story-day moves are reported separately as day
+    shifts, so one removed `SUPER: DAY 2` reads as "scenes 6–10 move to day 1"
+    rather than as dozens of changed facts.
+29. **The graph walk stays narrow on purpose.** Later scenes are listed only
+    for entities whose own facts changed. Costume rows are listed only when
+    they cover an affected scene or story day. Same-location scenes are listed
+    for scenes whose text changed.
+30. **An edit always creates a new document version**, even if it restores an
+    earlier text. Every version is kept, and any two can be compared.

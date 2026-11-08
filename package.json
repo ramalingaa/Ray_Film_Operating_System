@@ -14,7 +14,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "ingest": "tsx scripts/ingest.ts",
     "checks": "tsx scripts/run-checks.ts",
-    "eval": "tsx scripts/run-eval.ts"
+    "eval": "tsx scripts/run-eval.ts",
+    "impact": "tsx scripts/impact.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
