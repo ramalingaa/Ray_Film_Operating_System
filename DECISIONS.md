@@ -66,3 +66,25 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     careful extractor would read. It shows that, given correct facts, the
     deterministic checks catch every planted error they own with zero false
     alarms. Real-model numbers come from `npm run eval` with a key configured.
+18. **Judged checks are split into pure candidate generation plus a judge
+    agent.** `candidates(state)` stays a pure function of the snapshot; only
+    the runner (now async) calls models. Without a judge model, candidates are
+    counted as "not judged" and logged, never silently turned into findings.
+19. **Judge policies.** `primary`: the first judge that answers decides, and
+    later judges are fallbacks. `majority` / `unanimous`: every judge votes,
+    and a judge that fails is logged and left out of the vote. A vote counts as
+    "conflict" only at or above `JUDGE_CONFIDENCE_THRESHOLD` (default 0.7).
+    The reported confidence is the lowest among the agreeing votes.
+20. **Deterministic parts of judged checks**: a location missing from the
+    location sheet (medium) and an INT/EXT that disagrees with the sheet (low)
+    are decided in code. `INT/EXT` on either side is compatible with both.
+21. **Candidate rules.** Costume state carryover: the character's next scene,
+    same story day or a no-gap time, same garment, now undamaged, no
+    change-into. Time of day: heading bucket vs implied bucket, with
+    CONTINUOUS/LATER inheriting the previous heading, and only clearly
+    incompatible pairs (dusk vs evening never conflicts). Knowledge: a
+    reference before a later "learns" by the same character that shares a
+    content word. Location: each described scene vs the sheet notes and vs the
+    previous described scene at that place.
+22. **Extraction prompt v2** adds `location_details` (physical facts about a
+    place). This bumps `PROMPT_VERSION`, which invalidates cached extractions.

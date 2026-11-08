@@ -1,7 +1,7 @@
-import { cite, type Check, type FactInfo, type FindingDraft } from "./types";
+import { cite, type DeterministicCheck, type FactInfo, type FindingDraft } from "./types";
 
 /** An explicitly stated story day runs backwards in scene order, with no flashback marker. */
-export const timelineOrder: Check = {
+export const timelineOrder: DeterministicCheck = {
   id: "timeline_order",
   title: "Story days go backwards",
   kind: "deterministic",

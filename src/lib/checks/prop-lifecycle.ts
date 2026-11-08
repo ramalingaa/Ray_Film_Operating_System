@@ -1,4 +1,4 @@
-import { cite, nameOf, sceneIndex, type Check, type FactInfo, type FindingDraft, type SceneInfo } from "./types";
+import { cite, nameOf, sceneIndex, type DeterministicCheck, type FactInfo, type FindingDraft, type SceneInfo } from "./types";
 
 interface PropEvent {
   fact: FactInfo;
@@ -11,7 +11,7 @@ interface PropEvent {
  * that cannot be carried) in two different locations on the same story day.
  * Flashback scenes are ignored: they legitimately show a prop's past.
  */
-export const propLifecycle: Check = {
+export const propLifecycle: DeterministicCheck = {
   id: "prop_lifecycle",
   title: "Prop lifecycle conflict",
   kind: "deterministic",

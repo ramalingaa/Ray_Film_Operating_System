@@ -3,9 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Ledger, type AgentContext } from "@/lib/agents/runtime";
 import { openDb } from "@/lib/db/client";
-import { ModelGateway } from "@/lib/llm/gateway";
-import { ModelConfigError } from "@/lib/llm/types";
 import { ingest } from "@/lib/pipeline/ingest";
+import { gatewayFor } from "./models";
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -17,17 +16,7 @@ const read = (p: string) => ({ name: path.basename(p), text: fs.readFileSync(p, 
 async function main() {
   const db = openDb();
   const ledger = new Ledger(db);
-  let gateway: ModelGateway | undefined;
-  if (!process.argv.includes("--no-models")) {
-    gateway = ModelGateway.fromEnv();
-    try {
-      for (const spec of gateway.specs("extract")) gateway.adapter(spec);
-    } catch (err) {
-      if (!(err instanceof ModelConfigError)) throw err;
-      console.warn(`! models unavailable (${err.message}); running deterministic extraction only`);
-      gateway = undefined;
-    }
-  }
+  const gateway = gatewayFor(["extract"]);
   const ctx: AgentContext = { db, ledger, gateway };
 
   const costumes = arg("costumes", "data/costumes.csv");

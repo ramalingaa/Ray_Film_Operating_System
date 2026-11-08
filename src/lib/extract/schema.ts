@@ -28,6 +28,12 @@ export const SceneExtractionSchema = z.object({
     time_of_day: z.string().describe("As stated in the heading, e.g. NIGHT, CONTINUOUS"),
     ...source,
   }),
+  location_details: z.array(
+    z.object({
+      detail: z.string().describe("A physical fact about the place: floor, size, layout, condition, fixtures"),
+      ...source,
+    }),
+  ).describe("Concrete descriptions of the location in this scene. Empty if none."),
   time_of_day_evidence: z.array(
     z.object({
       implies: z.enum(["dawn", "morning", "day", "evening", "dusk", "night"]),

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { Ledger } from "../agents/runtime";
 import { CHECKS } from "../checks/index";
 import { runChecks } from "../checks/run";
+import type { JudgeSettings } from "../checks/judge";
 import type { Check } from "../checks/types";
 import type { Db } from "../db/client";
 import { findings, pipelineIssues } from "../db/schema";
@@ -24,6 +25,7 @@ export interface EvalReport {
   seeded: ScoreResult;
   clean: { falseAlarms: number; findings: ScoredFinding[] };
   pipeline: { skippedScenes: number; droppedItems: number; issues: number };
+  judge: { models: string[]; policy: string; threshold: number; candidates: number; accepted: number; rejected: number; unjudged: number };
 }
 
 function findingsFor(db: Db, docId: number): ScoredFinding[] {
@@ -36,7 +38,13 @@ function findingsFor(db: Db, docId: number): ScoredFinding[] {
 }
 
 /** Ingest the clean and seeded scripts, run every check, and score the seeded findings. */
-export async function runEval(db: Db, gateway: ModelGateway | undefined, input: EvalInput, checks: Check[] = CHECKS): Promise<EvalReport> {
+export async function runEval(
+  db: Db,
+  gateway: ModelGateway | undefined,
+  input: EvalInput,
+  judgeSettings: JudgeSettings = { policy: "primary", threshold: 0.7 },
+  checks: Check[] = CHECKS,
+): Promise<EvalReport> {
   const ledger = new Ledger(db);
   const issuesBefore = db.select({ id: pipelineIssues.id }).from(pipelineIssues).all().length;
   const ctx = { db, ledger, gateway };
@@ -44,8 +52,9 @@ export async function runEval(db: Db, gateway: ModelGateway | undefined, input: 
 
   const clean = await ingest(ctx, { script: input.clean, ...sheets });
   const seeded = await ingest(ctx, { script: input.seeded, ...sheets });
-  runChecks(db, clean.scriptDocId, checks);
-  runChecks(db, seeded.scriptDocId, checks);
+  const judged = { checks, judgeCtx: ctx, judgeSettings };
+  const cleanRun = await runChecks(db, clean.scriptDocId, judged);
+  const seededRun = await runChecks(db, seeded.scriptDocId, judged);
 
   const cleanFindings = findingsFor(db, clean.scriptDocId);
   return {
@@ -54,6 +63,15 @@ export async function runEval(db: Db, gateway: ModelGateway | undefined, input: 
     checks: checks.map((c) => c.id),
     seeded: score(findingsFor(db, seeded.scriptDocId), input.manifest, checks.map((c) => c.id)),
     clean: { falseAlarms: cleanFindings.length, findings: cleanFindings },
+    judge: {
+      models: gateway ? gateway.specs("judge") : [],
+      policy: judgeSettings.policy,
+      threshold: judgeSettings.threshold,
+      candidates: cleanRun.judge.candidates + seededRun.judge.candidates,
+      accepted: cleanRun.judge.accepted + seededRun.judge.accepted,
+      rejected: cleanRun.judge.rejected + seededRun.judge.rejected,
+      unjudged: cleanRun.judge.unjudged + seededRun.judge.unjudged,
+    },
     pipeline: {
       skippedScenes: clean.skippedScenes + seeded.skippedScenes,
       droppedItems: clean.droppedItems + seeded.droppedItems,
@@ -69,6 +87,7 @@ export function formatReport(r: EvalReport): string {
   const lines = [
     `Eval ${r.ranAt}`,
     `models: ${r.models.length ? r.models.join(", ") : "none (deterministic extraction only)"}`,
+    `judge: ${r.judge.models.length ? `${r.judge.models.join(", ")} (${r.judge.policy}, threshold ${r.judge.threshold})` : "none"} — ${r.judge.candidates} candidates, ${r.judge.accepted} accepted, ${r.judge.rejected} rejected, ${r.judge.unjudged} not judged`,
     "",
     `Seeded script: precision ${pct(s.precision)}  recall ${pct(s.recall)}  (tp ${s.tp}, fp ${s.fp}, fn ${s.fn})`,
     `Clean script false alarms: ${r.clean.falseAlarms}`,

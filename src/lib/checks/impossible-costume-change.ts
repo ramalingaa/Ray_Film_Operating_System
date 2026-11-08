@@ -1,5 +1,5 @@
 import { conflictWith, parseGarment, type Garment, type Slot } from "./garments";
-import { cite, nameOf, sceneIndex, type Check, type FactInfo, type FindingDraft, type SceneInfo } from "./types";
+import { cite, nameOf, sceneIndex, type DeterministicCheck, type FactInfo, type FindingDraft, type SceneInfo } from "./types";
 
 /** Times of day that mean "no time has passed since the previous scene". */
 export const NO_GAP_TIMES = new Set(["CONTINUOUS", "MOMENTS LATER", "SECONDS LATER", "SAME", "SAME TIME"]);
@@ -11,7 +11,7 @@ interface Worn {
 }
 
 /** Costume differs between back-to-back scenes with no time for a change. */
-export const impossibleCostumeChange: Check = {
+export const impossibleCostumeChange: DeterministicCheck = {
   id: "impossible_costume_change",
   title: "Costume changes with no time to change",
   kind: "deterministic",

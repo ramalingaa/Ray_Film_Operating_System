@@ -120,6 +120,7 @@ function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what:
   return {
     characters: keep(x.characters, (c) => `character ${c.name}`),
     setting: setting.ok ? { ...x.setting, source_line: setting.line, source_snippet: setting.snippet } : { ...x.setting, source_line: scene.startLine, source_snippet: scene.heading },
+    location_details: keep(x.location_details, (d) => `location detail ${d.detail}`),
     time_of_day_evidence: keep(x.time_of_day_evidence, (t) => `time cue ${t.implies}`),
     story_day: day.ok
       ? { ...x.story_day, source_line: day.line, source_snippet: day.snippet }
@@ -334,6 +335,9 @@ export async function ingest(ctx: AgentContext, input: IngestInput): Promise<Ing
       if (seenSpeakers.has(id)) continue;
       seenSpeakers.add(id);
       rows.push({ ...m(), kind: "appears_in", subjectEntityId: id, predicate: "present_in", objectValue: s.number, sourceLine: c.source_line, sourceSnippet: c.source_snippet, attrsJson: JSON.stringify({ speaking: c.speaking }) });
+    }
+    for (const d of x.location_details) {
+      rows.push({ ...m(0.8), kind: "located_at", subjectEntityId: locId(s.location), predicate: "location_detail", objectValue: d.detail, sourceLine: d.source_line, sourceSnippet: d.source_snippet });
     }
     for (const t of x.time_of_day_evidence) {
       rows.push({ ...m(0.8), kind: "time_of_day", predicate: "implied_time", objectValue: t.implies, sourceLine: t.source_line, sourceSnippet: t.source_snippet });

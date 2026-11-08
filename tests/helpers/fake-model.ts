@@ -4,6 +4,7 @@ import type { SceneExtraction } from "@/lib/extract/schema";
 export const emptyExtraction = (line: number, heading: string): SceneExtraction => ({
   characters: [],
   setting: { location: "X", int_ext: "INT", time_of_day: "DAY", source_line: line, source_snippet: heading },
+  location_details: [],
   time_of_day_evidence: [],
   story_day: { relation: "unknown", day: null, reasoning: "", source_line: line, source_snippet: heading },
   costumes: [],

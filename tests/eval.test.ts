@@ -6,6 +6,7 @@ import { runEval } from "@/lib/eval/run";
 import { parseManifest, score, type SeededError } from "@/lib/eval/score";
 import { parseFountain } from "@/lib/fountain";
 import { ModelGateway } from "@/lib/llm/gateway";
+import type { StructuredRequest } from "@/lib/llm/types";
 import { planExtractor, SEEDED_PLAN, CLEAN_PLAN } from "./helpers/placeholder-plan";
 
 const err = (id: string, check: string, scenes: string[], also?: string[]): SeededError => ({ id, check_id: check, scenes, description: id, also_checks: also });
@@ -57,37 +58,74 @@ describe("seeded eval set", () => {
   });
 });
 
+const cleanText = fs.readFileSync("data/script.fountain", "utf8");
+const seededText = fs.readFileSync("data/eval/script.seeded.fountain", "utf8");
+const evalInput = () => ({
+  clean: { name: "script.fountain", text: cleanText },
+  seeded: { name: "script.seeded.fountain", text: seededText },
+  costumes: { name: "costumes.csv", text: fs.readFileSync("data/costumes.csv", "utf8") },
+  locations: { name: "locations.csv", text: fs.readFileSync("data/locations.csv", "utf8") },
+  manifest: parseManifest(fs.readFileSync("data/eval/seeded_errors.yaml", "utf8")),
+});
+
+/** Extraction follows the scene plans; the judge (if any) is a scripted stand-in. */
+function planGateway(judgeAnswer?: (prompt: string) => { conflict: boolean; confidence: number; reason: string }) {
+  const cleanModel = planExtractor(CLEAN_PLAN, cleanText);
+  const seededModel = planExtractor(SEEDED_PLAN, seededText);
+  // Unchanged scenes are identical in both scripts; edited scenes only exist in the seeded one.
+  const sceneText = (prompt: string) =>
+    prompt
+      .split("with line numbers:\n")[1]
+      .split("\n\nExtract the continuity facts")[0]
+      .replace(/^\s*\d+\| /gm, "");
+  const judged: string[] = [];
+  const gateway = new ModelGateway({ extract: ["fake:plan"], judge: judgeAnswer ? ["fake:judge"] : [] }, (spec) =>
+    spec === "fake:judge"
+      ? {
+          spec,
+          generate: async <T,>(req: StructuredRequest<T>) => {
+            judged.push(req.user);
+            return { data: req.schema.parse(judgeAnswer!(req.user)), model: spec, usage: {} };
+          },
+        }
+      : { spec, generate: (req) => (cleanText.includes(sceneText(req.user)) ? cleanModel : seededModel).generate(req) },
+  );
+  return { gateway, judged };
+}
+
 describe("runEval", () => {
-  it("with accurate extraction, the deterministic checks catch every error they own and raise no false alarms", async () => {
-    const db = openDb(":memory:");
-    const cleanText = fs.readFileSync("data/script.fountain", "utf8");
-    const seededText = fs.readFileSync("data/eval/script.seeded.fountain", "utf8");
-    const cleanModel = planExtractor(CLEAN_PLAN, cleanText);
-    const seededModel = planExtractor(SEEDED_PLAN, seededText);
-    // Unchanged scenes are identical in both scripts; edited scenes only exist in the seeded one.
-    const sceneText = (prompt: string) =>
-      prompt
-        .split("with line numbers:\n")[1]
-        .split("\n\nExtract the continuity facts")[0]
-        .replace(/^\s*\d+\| /gm, "");
-    const gateway = new ModelGateway({ extract: ["fake:plan"], judge: [] }, () => ({
-      spec: "fake:plan",
-      generate: (req) => (cleanText.includes(sceneText(req.user)) ? cleanModel : seededModel).generate(req),
-    }));
+  it("without a judge: deterministic checks catch every error they own, with no false alarms", async () => {
+    const { gateway } = planGateway();
+    const report = await runEval(openDb(":memory:"), gateway, evalInput());
 
-    const report = await runEval(db, gateway, {
-      clean: { name: "script.fountain", text: cleanText },
-      seeded: { name: "script.seeded.fountain", text: seededText },
-      costumes: { name: "costumes.csv", text: fs.readFileSync("data/costumes.csv", "utf8") },
-      locations: { name: "locations.csv", text: fs.readFileSync("data/locations.csv", "utf8") },
-      manifest: parseManifest(fs.readFileSync("data/eval/seeded_errors.yaml", "utf8")),
-    });
-
+    expect(report.checks).toEqual(CHECKS.map((c) => c.id));
     expect(report.clean.falseAlarms).toBe(0);
     expect(report.pipeline.droppedItems).toBe(0);
     expect(report.seeded.falseAlarms.map((x) => x.title)).toEqual([]);
+    expect(report.seeded.precision).toBe(1);
+    // Only errors that need a judge are missed (E14, not-on-sheet, is deterministic).
+    expect(report.seeded.missed.map((e) => e.id)).toEqual(["E07", "E08", "E11", "E12", "E13", "E15", "E16", "E17"]);
+    expect(report.judge.unjudged).toBeGreaterThan(0);
+  });
+
+  it("candidate generation reaches every planted error (a judge that always agrees gets full recall)", async () => {
+    const { gateway, judged } = planGateway(() => ({ conflict: true, confidence: 0.9, reason: "stand-in" }));
+    const report = await runEval(openDb(":memory:"), gateway, evalInput());
     expect(report.seeded.missed.map((e) => e.id)).toEqual([]);
-    expect(report.seeded).toMatchObject({ precision: 1, recall: 1 });
-    expect(report.checks).toEqual(CHECKS.map((c) => c.id));
+    expect(report.seeded.recall).toBe(1);
+    // The noise budget the real judge has to filter: candidates raised on the clean script.
+    expect(report.clean.falseAlarms).toBeLessThanOrEqual(3);
+    expect(judged.length).toBe(report.judge.candidates);
+  });
+
+  it("a judge that rejects everything adds no findings, and verdicts are cached", async () => {
+    const db = openDb(":memory:");
+    const first = planGateway(() => ({ conflict: false, confidence: 0.9, reason: "not a conflict" }));
+    const r1 = await runEval(db, first.gateway, evalInput());
+    expect(r1.judge.accepted).toBe(0);
+    expect(r1.seeded.falseAlarms).toEqual([]);
+    const second = planGateway(() => ({ conflict: false, confidence: 0.9, reason: "not a conflict" }));
+    await runEval(db, second.gateway, evalInput());
+    expect(second.judged).toEqual([]);
   });
 });

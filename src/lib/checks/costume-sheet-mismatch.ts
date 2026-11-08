@@ -1,8 +1,8 @@
 import { conflictWith, parseGarment, splitCostume } from "./garments";
-import { cite, nameOf, sceneIndex, type Check, type FindingDraft } from "./types";
+import { cite, nameOf, sceneIndex, type DeterministicCheck, type FindingDraft } from "./types";
 
 /** Script says a character wears X in a scene; the costume sheet says Y for that scene or story day. */
-export const costumeSheetMismatch: Check = {
+export const costumeSheetMismatch: DeterministicCheck = {
   id: "costume_sheet_mismatch",
   title: "Script costume differs from the costume sheet",
   kind: "deterministic",

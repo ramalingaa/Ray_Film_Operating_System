@@ -22,7 +22,7 @@ describe("ingest + deterministic checks on the placeholder script", () => {
     const ctx = { db, ledger: new Ledger(db), gateway: new ModelGateway({ extract: ["fake:x"], judge: [] }, () => fake) };
     const r = await ingest(ctx, { script: { name: "script.fountain", text: clean }, ...sheets });
     expect(r.droppedItems).toBe(0);
-    const summary = runChecks(db, r.scriptDocId);
+    const summary = await runChecks(db, r.scriptDocId);
     const rows = db.select().from(findings).all();
     expect(rows.map((f) => f.title)).toEqual([]);
     expect(summary.failedChecks).toEqual([]);
@@ -43,14 +43,14 @@ describe("ingest + deterministic checks on the placeholder script", () => {
     expect(r.scriptVersion).toBe(2);
     expect(seeded.calls).toBe(1); // only scene 4 changed
 
-    runChecks(db, r.scriptDocId);
+    await runChecks(db, r.scriptDocId);
     const found = db.select().from(findings).where(eq(findings.docId, r.scriptDocId)).all();
     expect(found).toHaveLength(1);
     expect(found[0]).toMatchObject({ checkId: "costume_sheet_mismatch", severity: "medium", status: "open" });
     expect(found[0].explanation).toContain("costumes.csv line 2");
 
     db.insert(dismissals).values({ findingSignature: found[0].signature, reason: "Maya borrows a coat off-screen" }).run();
-    const again = runChecks(db, r.scriptDocId);
+    const again = await runChecks(db, r.scriptDocId);
     expect(again).toMatchObject({ total: 1, open: 0, dismissed: 1 });
   });
 });
