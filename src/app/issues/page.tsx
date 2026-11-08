@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { Loading } from "@/components/nav";
-import { getDb } from "@/lib/db/client";
+import { Loading, SetupNeeded } from "@/components/nav";
+import { databaseProblem, getDb } from "@/lib/db/client";
 import { loadHealth } from "@/lib/ui/queries";
 
 export default function IssuesPage() {
@@ -20,6 +20,8 @@ const TONE = {
 
 async function Health() {
   await connection();
+  const problem = databaseProblem();
+  if (problem) return <SetupNeeded problem={problem} />;
   const { issues, agents } = await loadHealth(await getDb());
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-8">

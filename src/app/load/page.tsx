@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { loadProject, loadSampleProject } from "@/app/actions";
-import { Loading } from "@/components/nav";
+import { Loading, SetupNeeded } from "@/components/nav";
+import { databaseProblem } from "@/lib/db/client";
 import { availableGateway } from "@/lib/llm/available";
 
 /** Reading a full script with a model takes a few minutes. */
@@ -17,6 +18,8 @@ export default function LoadPage() {
 
 async function Load() {
   await connection();
+  const problem = databaseProblem();
+  if (problem) return <SetupNeeded problem={problem} />;
   const { gateway, reason } = availableGateway(["extract", "judge"]);
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">

@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { EmptyState, Loading } from "@/components/nav";
+import { EmptyState, Loading, SetupNeeded } from "@/components/nav";
 import { PrintButton } from "@/components/print-button";
-import { getDb } from "@/lib/db/client";
+import { databaseProblem, getDb } from "@/lib/db/client";
 import { latestScript, loadReadiness, type FindingView } from "@/lib/ui/queries";
 
 export default function ReadinessPage() {
@@ -15,6 +15,8 @@ export default function ReadinessPage() {
 
 async function Report() {
   await connection();
+  const problem = databaseProblem();
+  if (problem) return <SetupNeeded problem={problem} />;
   const db = await getDb();
   const doc = await latestScript(db);
   const r = doc && (await loadReadiness(db, doc.id));

@@ -31,6 +31,20 @@ export function describeTarget(target = defaultTarget()): string {
   return `PGlite at ${target}`;
 }
 
+/**
+ * Why the database cannot be used in this environment, or undefined if it can.
+ * Serverless hosts (Vercel) have a read-only, per-instance file system, so a
+ * local PGlite database is not an option there: DATABASE_URL is required.
+ */
+export function databaseProblem(env: Record<string, string | undefined> = process.env): string | undefined {
+  if (env.DATABASE_URL?.trim()) {
+    if (!/^postgres(ql)?:\/\//.test(env.DATABASE_URL.trim())) return "DATABASE_URL must start with postgresql://";
+    return undefined;
+  }
+  if (env.VERCEL) return "DATABASE_URL is not set for this deployment";
+  return undefined;
+}
+
 function defaultTarget(): string {
   return process.env.DATABASE_URL || process.env.DATABASE_PATH || "data/pglite";
 }
@@ -65,6 +79,8 @@ let shared: Promise<Db> | undefined;
  * not migrate a remote database; run `npm run db:migrate` once per schema change.
  */
 export function getDb(): Promise<Db> {
+  const problem = databaseProblem();
+  if (problem) return Promise.reject(new Error(problem));
   shared ??= openDb().catch((err) => {
     shared = undefined; // let the next request retry
     throw err;

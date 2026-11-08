@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { EmptyState, Loading } from "@/components/nav";
+import { EmptyState, Loading, SetupNeeded } from "@/components/nav";
 import { ScriptReview } from "@/components/script-review";
-import { getDb } from "@/lib/db/client";
+import { databaseProblem, getDb } from "@/lib/db/client";
 import { latestScript, loadReview } from "@/lib/ui/queries";
 
 export default function Home() {
@@ -16,6 +16,8 @@ export default function Home() {
 
 async function Review() {
   await connection();
+  const problem = databaseProblem();
+  if (problem) return <SetupNeeded problem={problem} />;
   const db = await getDb();
   const doc = await latestScript(db);
   const data = doc && (await loadReview(db, doc.id));

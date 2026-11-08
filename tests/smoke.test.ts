@@ -14,3 +14,13 @@ describe("smoke", () => {
     }
   });
 });
+
+describe("databaseProblem", () => {
+  it("requires DATABASE_URL on Vercel and accepts it anywhere", async () => {
+    const { databaseProblem } = await import("@/lib/db/client");
+    expect(databaseProblem({ VERCEL: "1" })).toMatch(/DATABASE_URL is not set/);
+    expect(databaseProblem({ VERCEL: "1", DATABASE_URL: "db.example.com:5432" })).toMatch(/postgresql:\/\//);
+    expect(databaseProblem({ VERCEL: "1", DATABASE_URL: "postgresql://u:p@h:6543/postgres" })).toBeUndefined();
+    expect(databaseProblem({})).toBeUndefined(); // local: falls back to PGlite
+  });
+});

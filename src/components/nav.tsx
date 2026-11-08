@@ -41,6 +41,23 @@ export function EmptyState() {
   );
 }
 
+/** Shown instead of a page when the database is not configured for this deployment. */
+export function SetupNeeded({ problem }: { problem: string }) {
+  return (
+    <div className="mx-auto max-w-xl p-10">
+      <h1 className="mb-2 text-xl font-semibold">Database not configured</h1>
+      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">{problem}.</p>
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
+        <li>
+          In the Vercel project, open Settings → Environment Variables and add <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">DATABASE_URL</code>{" "}
+          for Production (and Preview), using the Supabase <strong>transaction pooler</strong> connection string (port 6543).
+        </li>
+        <li>Redeploy. Environment variables only apply to deployments made after they are saved.</li>
+      </ol>
+    </div>
+  );
+}
+
 export function Loading() {
   return <p className="p-8 text-sm text-zinc-500">Loading…</p>;
 }

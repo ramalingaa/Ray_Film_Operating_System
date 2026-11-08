@@ -2,9 +2,9 @@ import { Suspense } from "react";
 import { desc, eq } from "drizzle-orm";
 import { connection } from "next/server";
 import { uploadEditedScript } from "@/app/actions";
-import { EmptyState, Loading } from "@/components/nav";
+import { EmptyState, Loading, SetupNeeded } from "@/components/nav";
 import { SceneEditForm } from "@/components/scene-edit-form";
-import { getDb } from "@/lib/db/client";
+import { databaseProblem, getDb } from "@/lib/db/client";
 import { documents, scenes } from "@/lib/db/schema";
 import { computeImpact, type ImpactReport, type Touch } from "@/lib/impact/impact";
 import { latestScript } from "@/lib/ui/queries";
@@ -24,6 +24,8 @@ export default function ImpactPage({ searchParams }: { searchParams: Search }) {
 
 async function Impact({ searchParams }: { searchParams: Search }) {
   await connection();
+  const problem = databaseProblem();
+  if (problem) return <SetupNeeded problem={problem} />;
   const db = await getDb();
   const latest = await latestScript(db);
   if (!latest) return <EmptyState />;
