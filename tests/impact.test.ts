@@ -19,7 +19,7 @@ const sheets = {
 /** A store with the clean script ingested and checked, and an extractor that knows the edited scene 4. */
 async function setup() {
   const db = await openDb(":memory:");
-  const edited: ScenePlan = { ...CLEAN_PLAN, "4": { costumes: [["DANIEL", "torn suit jacket", "torn"], ["MAYA", "yellow raincoat"]] } };
+  const edited: ScenePlan = { ...CLEAN_PLAN, "4": { ...CLEAN_PLAN["4"], costumes: [["DANIEL", "torn suit jacket", "torn"], ["MAYA", "yellow raincoat"]] } };
   const editedText = clean.replace("Maya, still in her green raincoat, floors it.", "Maya, still in her yellow raincoat, floors it.");
   const cleanModel = planExtractor(CLEAN_PLAN, clean);
   const editedModel = planExtractor(edited, editedText);

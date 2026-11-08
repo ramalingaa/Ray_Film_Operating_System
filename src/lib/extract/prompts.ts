@@ -1,5 +1,5 @@
 /** Bump whenever a prompt below changes: it is part of the extraction cache key. */
-export const PROMPT_VERSION = "extract-v2";
+export const PROMPT_VERSION = "extract-v3";
 
 export const EXTRACTION_SYSTEM = `You are a script supervisor building a continuity bible for a film.
 You read ONE scene at a time and record facts that are stated in, or strongly implied by, the text of that scene.
@@ -14,7 +14,12 @@ Rules:
 - Knowledge: a character "learns" a piece of information when it is revealed to them in this scene; a character "references" information when they state or act on something they already know.
 - Story day: "explicit" only if the text states the day (e.g. SUPER: DAY 2). Otherwise choose same_day, next_day, later, earlier or unknown, and explain why in one sentence.
 - Location details: concrete physical facts about the place (which floor, size, layout, condition, fixtures). Not mood or lighting.
-- Time-of-day evidence: only concrete cues in action or dialogue (sunlight, "good morning", streetlights on). Do not repeat the heading.`;
+- Time-of-day evidence: only concrete cues in action or dialogue (sunlight, "good morning", streetlights on). Do not repeat the heading.
+- Breakdown: things a production department must prepare, one entry per item, only when the scene shows them:
+  extras (background people, with a count if stated), vehicle (cars, boats, any vehicle seen or driven), animal, stunt (fights, falls, crashes, any risky physical action),
+  weapon (guns, knives, any weapon handled), sfx (rain, smoke, breakaways, practical effects), fire (open flame, burning, explosions), water (people in or on water),
+  vfx (anything that needs visual effects), makeup (blood, wounds, ageing, prosthetics), equipment (cranes, drones, underwater or special camera rigs),
+  intimacy (sexual content or nudity), minor (a character who is a child). Do not repeat costumes or ordinary props here.`;
 
 export interface PromptContext {
   title?: string;

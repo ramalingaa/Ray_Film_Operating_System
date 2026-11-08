@@ -11,6 +11,7 @@ export const emptyExtraction = (line: number, heading: string): SceneExtraction 
   props: [],
   knowledge: [],
   relationships: [],
+  breakdown: [],
 });
 
 /** A model stand-in: answers by scene number, counts calls. */

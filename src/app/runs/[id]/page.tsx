@@ -4,14 +4,18 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { retryFailedRun } from "@/app/actions";
 import { Loading, SetupNeeded } from "@/components/nav";
+import { BreakdownReportView } from "@/components/reports/breakdown-report";
 import { ContinuityReportView } from "@/components/reports/continuity-report";
 import { IntakeReportView } from "@/components/reports/intake-report";
+import { LocationsReportView } from "@/components/reports/locations-report";
 import { StoryReportView } from "@/components/reports/story-report";
 import { StatusBadge } from "@/components/run-bits";
 import { RunDriver } from "@/components/run-driver";
 import { databaseProblem, getDb, type Db } from "@/lib/db/client";
+import type { BreakdownReport } from "@/lib/stages/breakdown";
 import type { ContinuityReport } from "@/lib/stages/continuity";
 import type { IntakeReport } from "@/lib/stages/intake";
+import type { LocationsReport } from "@/lib/stages/locations";
 import type { Skipped, StoryReport } from "@/lib/stages/story";
 import { loadReview } from "@/lib/ui/queries";
 import { loadRun, type RunView, type StageView } from "@/lib/ui/runs";
@@ -113,6 +117,10 @@ async function StageBody({ stage, run, db }: { stage: StageView; run: RunView; d
       const r = stage.report as ContinuityReport;
       return <ContinuityReportView r={r} review={await loadReview(db, r.docId)} />;
     }
+    case "breakdown":
+      return <BreakdownReportView r={stage.report as BreakdownReport} />;
+    case "locations":
+      return <LocationsReportView r={stage.report as LocationsReport} />;
     default:
       return <pre className="text-xs">{JSON.stringify(stage.report, null, 2)}</pre>;
   }

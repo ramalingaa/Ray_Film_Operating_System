@@ -6,14 +6,21 @@ type Prop = [name: string, action: SceneExtraction["props"][number]["action"]];
 type Knowledge = [who: string, kind: "learns" | "references", fact: string, snippet: string];
 type Time = [implies: SceneExtraction["time_of_day_evidence"][number]["implies"], snippet: string];
 type Detail = [detail: string, snippet: string];
-export type ScenePlan = Record<string, { costumes?: Costume[]; props?: Prop[]; knowledge?: Knowledge[]; time?: Time[]; details?: Detail[] }>;
+type Breakdown = [category: SceneExtraction["breakdown"][number]["category"], item: string, snippet: string];
+export type ScenePlan = Record<string, { costumes?: Costume[]; props?: Prop[]; knowledge?: Knowledge[]; time?: Time[]; details?: Detail[]; breakdown?: Breakdown[] }>;
 
 /** What a careful extractor would read from data/script.fountain, scene by scene. */
 export const CLEAN_PLAN: ScenePlan = {
-  "1": { costumes: [["MAYA REYES", "green raincoat"], ["MAYA REYES", "grey sweater"], ["DANIEL REYES", "navy suit"], ["DANIEL REYES", "white shirt"]], props: [["brass key", "introduced"]] },
+  "1": { costumes: [["MAYA REYES", "green raincoat"], ["MAYA REYES", "grey sweater"], ["DANIEL REYES", "navy suit"], ["DANIEL REYES", "white shirt"]], props: [["brass key", "introduced"]], breakdown: [["sfx", "heavy rain", "Rain hammers the pier"]] },
   "2": { costumes: [["VOSS", "brown cardigan"], ["DANIEL", "navy suit", "wet"]], props: [["ledger", "mentioned"]] },
-  "3": { costumes: [["DANIEL", "suit jacket", "torn"]] },
-  "4": { costumes: [["DANIEL", "torn suit jacket", "torn"], ["MAYA", "green raincoat"]] },
+  "3": { costumes: [["DANIEL", "suit jacket", "torn"]], breakdown: [["stunt", "fight into desk", "They crash into the desk"]] },
+  "4": {
+    costumes: [["DANIEL", "torn suit jacket", "torn"], ["MAYA", "green raincoat"]],
+    breakdown: [
+      ["vehicle", "Maya's hatchback", "hatchback skids"],
+      ["makeup", "blood on lip", "blood on his lip"],
+    ],
+  },
   "5": {
     costumes: [["DANIEL", "torn suit jacket", "torn"]],
     props: [["ledger", "mentioned"]],
@@ -31,8 +38,16 @@ export const CLEAN_PLAN: ScenePlan = {
     costumes: [["VOSS", "oilskin coat"], ["MAYA", "black leather jacket", "scorched"]],
     props: [["brass key", "used"], ["leather-bound ledger", "used"], ["lantern", "destroyed"], ["leather-bound ledger", "destroyed"]],
     details: [["spiral stair to the lamp room", "spiral stair"]],
+    breakdown: [
+      ["fire", "lantern fire, sleeve catches", "Flames lick Maya's sleeve"],
+      ["stunt", "struggle on the stairs", "They struggle"],
+    ],
   },
-  "10": { costumes: [["OKAFOR", "charcoal overcoat"], ["MAYA", "scorched leather jacket", "scorched"]], props: [["brass key", "used"]] },
+  "10": {
+    costumes: [["OKAFOR", "charcoal overcoat"], ["MAYA", "scorched leather jacket", "scorched"]],
+    props: [["brass key", "used"]],
+    breakdown: [["vehicle", "police squad car", "squad car"]],
+  },
 };
 
 /** The same, for data/eval/script.seeded.fountain. */
@@ -90,6 +105,7 @@ export function planExtractor(plan: ScenePlan, scriptText: string) {
     x.knowledge = (p.knowledge ?? []).map(([character, kind, fact, snippet]) => ({ character, kind, fact, ...at(snippet) }));
     x.time_of_day_evidence = (p.time ?? []).map(([implies, snippet]) => ({ implies, ...at(snippet) }));
     x.location_details = (p.details ?? []).map(([detail, snippet]) => ({ detail, ...at(snippet) }));
+    x.breakdown = (p.breakdown ?? []).map(([category, item, snippet]) => ({ category, item, detail: null, ...at(snippet) }));
     return x;
   });
 }

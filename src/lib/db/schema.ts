@@ -89,6 +89,7 @@ export const FACT_KINDS = [
   "learns_fact",
   "references_fact",
   "relationship",
+  "breakdown_element",
 ] as const;
 export type FactKind = (typeof FACT_KINDS)[number];
 

@@ -12,6 +12,23 @@ const source = {
 
 export const GARMENT_STATES = ["normal", "torn", "wet", "bloody", "dirty", "scorched", "other"] as const;
 export const PROP_ACTIONS = ["introduced", "used", "mentioned", "destroyed", "lost", "repaired", "replaced"] as const;
+export const BREAKDOWN_CATEGORIES = [
+  "extras",
+  "vehicle",
+  "animal",
+  "stunt",
+  "weapon",
+  "sfx",
+  "fire",
+  "water",
+  "vfx",
+  "makeup",
+  "equipment",
+  "intimacy",
+  "minor",
+] as const;
+export type BreakdownCategory = (typeof BREAKDOWN_CATEGORIES)[number];
+
 export const DAY_RELATIONS = ["explicit", "same_day", "next_day", "later", "earlier", "unknown"] as const;
 
 export const SceneExtractionSchema = z.object({
@@ -82,6 +99,16 @@ export const SceneExtractionSchema = z.object({
       ...source,
     }),
   ),
+  breakdown: z
+    .array(
+      z.object({
+        category: z.enum(BREAKDOWN_CATEGORIES),
+        item: z.string().describe("Short name, e.g. 'hatchback', 'fistfight', 'lit lantern', '20 dock workers'"),
+        detail: z.string().nullable().describe("Anything a department needs: count, action, condition"),
+        ...source,
+      }),
+    )
+    .describe("Things a production department must prepare for this scene. Empty if none."),
 });
 
 export type SceneExtraction = z.infer<typeof SceneExtractionSchema>;

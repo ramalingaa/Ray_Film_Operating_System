@@ -132,6 +132,7 @@ function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what:
     props: keep(x.props, (p) => `prop ${p.name}`),
     knowledge: keep(x.knowledge, (k) => `knowledge ${k.character}: ${k.fact}`),
     relationships: keep(x.relationships, (r) => `relationship ${r.a}–${r.b}`),
+    breakdown: keep(x.breakdown, (b) => `${b.category} ${b.item}`),
   };
 }
 
@@ -398,6 +399,9 @@ export async function ingest(ctx: AgentContext, input: IngestInput, opts: Ingest
     }
     for (const k of x.knowledge) {
       rows.push({ ...m(0.8), kind: k.kind === "learns" ? "learns_fact" : "references_fact", subjectEntityId: charId(k.character), predicate: k.kind, objectValue: k.fact, sourceLine: k.source_line, sourceSnippet: k.source_snippet });
+    }
+    for (const b of x.breakdown) {
+      rows.push({ ...m(0.85), kind: "breakdown_element", predicate: b.category, objectValue: b.item, sourceLine: b.source_line, sourceSnippet: b.source_snippet, attrsJson: JSON.stringify({ detail: b.detail }) });
     }
     for (const r of x.relationships) {
       const b = normalizeCharacterName(r.b);

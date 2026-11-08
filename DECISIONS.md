@@ -183,3 +183,15 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     medium.
 47. **A stage that needs a model is skipped, not failed, when none is
     configured** (it reports why), so code-only stages still run.
+48. **Breakdown elements come from the same per-scene read** (a new
+    `breakdown` field, prompt `extract-v3`), not a second model pass. Bumping
+    the prompt version re-reads every scene once.
+49. **Minors are decided by code** from ages stated the screenplay way
+    ("YOUNG MAYA (8)"); "(30s)" is a decade, not a minor. Night and dawn/dusk
+    exteriors come from scene headings. Department alerts are fixed rules in
+    `src/lib/breakdown/rules.ts`, each citing the lines that triggered it.
+50. **A scene's cast is everyone who speaks, is present, wears something or
+    holds something in it**, so silent characters with wardrobe are counted.
+51. **Locations group scenes by resolved location entity** (INT and EXT of
+    the same place are one set). Flags: missing from the sheet, needed by day
+    and night, and one-off sets of a quarter page or less.
