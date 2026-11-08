@@ -3,19 +3,21 @@
 A story graph for film: from a one-line logline to a pre-production package,
 with every fact traced to its source line and every conflict flagged.
 
-Upload or paste a **screenplay** (Fountain, Final Draft `.fdx`, plain text) or
-a **story** (prose, treatment, logline) and the app runs it through seven
-stages, each with its own report:
+A production moves through six chapters, like a real team would. Each one is
+tested, explained line by line, and approved by a person before the next one
+opens:
 
-| # | Stage | What it tells you |
-|---|---|---|
-| 1 | Intake | Screenplay or story, scenes, page eighths, running time, format problems. A story is adapted into a generated scene outline. |
-| 2 | Story | Logline elements, the 15 beats and where they land, a card per scene, scenes that do not turn, setups never paid off |
-| 3 | Continuity | The eight continuity checks with exact citations (review, dismiss, follow up) |
-| 4 | Breakdown | Cast, wardrobe, props, extras, vehicles, animals, stunts, weapons, effects, minors per scene, and alerts for each department |
-| 5 | Locations | Sets, interior/exterior and day/night needs, sheet coverage, one-off company moves |
-| 6 | Schedule | Draft stripboard, day-out-of-days, night-turnaround, child-hours, company-move and holding-day checks |
-| 7 | Budget | Rough top sheet from the schedule; every line shows quantity × rate and its source |
+| Chapter | You provide | It tests | You decide |
+|---|---|---|---|
+| I. The Story | A story, treatment or logline (revise and re-test freely) | Logline elements, the 15 beats, setups, strengths, producer questions | Lock the story |
+| II. The Screenplay | "Write it from my story", or your own (Fountain, Final Draft, text) | Pages and running time, structure and scene cards, the 8 continuity checks | Lock the script |
+| III. The Breakdown | — | Cast, wardrobe, props, extras, vehicles, stunts, weapons, effects, minors; department alerts | Approve |
+| IV. The Places | — | Sets, interior/exterior and day/night needs, sheet coverage | Approve |
+| V. The Schedule | — | Draft stripboard, day-out-of-days, turnaround, child-hours and holding-day checks | Approve |
+| VI. The Budget | — | Rough top sheet; every line shows quantity × rate and its source | Greenlight |
+
+Start from a story (chapter I) or from a screenplay (chapter II). Reopening a
+chapter resets the chapters after it.
 
 Every finding cites the document and line it comes from. See
 `docs/spec-production-pipeline.md`, `ARCHITECTURE.md` and `DECISIONS.md`.

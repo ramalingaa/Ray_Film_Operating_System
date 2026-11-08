@@ -6,7 +6,7 @@ import { openDb } from "@/lib/db/client";
 import { runStages } from "@/lib/db/schema";
 import { parseFountain } from "@/lib/fountain";
 import { ModelGateway } from "@/lib/llm/gateway";
-import { createRun, runToEnd } from "@/lib/pipeline/runs";
+import { autopilot, createRun } from "@/lib/pipeline/runs";
 import type { BreakdownReport } from "@/lib/stages/breakdown";
 import type { BudgetReport } from "@/lib/stages/budget";
 import type { LocationsReport } from "@/lib/stages/locations";
@@ -38,7 +38,7 @@ async function runSample(text = script, extraSheets: Partial<typeof sheets> = sh
   });
   const gateway = new ModelGateway({ extract: ["fake:router"], judge: ["fake:router"] }, () => model);
   const id = await createRun(db, { sourceName: "script.fountain", text, ...extraSheets });
-  expect(await runToEnd(db, id, { gateway, judgeSettings })).toEqual({ state: "done" });
+  expect(await autopilot(db, id, { gateway, judgeSettings })).toEqual({ state: "done" });
   const rows = await db.select().from(runStages).where(eq(runStages.runId, id));
   const report = <T,>(stage: string) => JSON.parse(rows.find((r) => r.stage === stage)!.reportJson!) as T;
   return {

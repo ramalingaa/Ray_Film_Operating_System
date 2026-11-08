@@ -210,3 +210,30 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 55. **A child is identified once but counted everywhere they work**: the
     studio teacher and the night-work check follow the child's name through
     every scene, not only the scene where their age is stated.
+56. **A production moves through six chapters in order**: Story, Screenplay,
+    Breakdown, Locations, Schedule, Budget (`src/lib/stages/chapters.ts`). A
+    chapter's stages run only when every earlier chapter is approved; a person
+    approves each one. Approval is allowed with open high-priority notes (the
+    gate says how many): the tool informs, people decide.
+57. **Starting from a story begins at chapter I; starting from a screenplay
+    begins at chapter II** with chapter I marked skipped. The classifier, not
+    the button pressed, decides which: a screenplay pasted as a "story" starts
+    at chapter II.
+58. **Chapter I tests the prose story itself** (logline elements, which beats
+    are present and where, setups, strengths, producer questions). Citations
+    are verified against the story text. Under 400 words, beat positions are
+    not measured.
+59. **Chapter II asks how the screenplay is made**: written from the story
+    (adaptation agent) or provided by the user. Either can be revised and
+    re-tested while the chapter is open; editing the story clears a screenplay
+    that was written from it.
+60. **Reopening a chapter un-approves it and clears every later chapter's
+    results**, as a real story change ripples downstream. Its own results stay
+    for review.
+61. **A partly read screenplay fails its chapter.** If any scene could not be
+    read by any model (for example an exhausted quota), the continuity step
+    fails with the count, so the chapter cannot be approved on incomplete
+    tests. Retrying re-reads only the missing scenes.
+62. **The look is an original storybook theme** (night sky, parchment, gold,
+    Cormorant Garamond with Nunito Sans), with light and dark modes. No
+    third-party characters, logos or brand fonts.

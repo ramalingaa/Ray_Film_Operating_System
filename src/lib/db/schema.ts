@@ -185,7 +185,7 @@ export const pipelineIssues = pgTable("pipeline_issues", {
   createdAt: createdAt(),
 });
 
-export const RUN_STAGES = ["intake", "story", "continuity", "breakdown", "locations", "schedule", "budget"] as const;
+export const RUN_STAGES = ["story_test", "intake", "story", "continuity", "breakdown", "locations", "schedule", "budget"] as const;
 export type RunStage = (typeof RUN_STAGES)[number];
 
 /**
@@ -199,8 +199,14 @@ export const runs = pgTable("runs", {
   inputKind: text("input_kind", { enum: ["screenplay", "story"] }).notNull(),
   sourceName: text("source_name").notNull(),
   inputText: text("input_text").notNull(),
-  /** The Fountain text the later stages read (the input itself, or the generated outline for a story). */
+  /** Chapter 1: the story being developed (null when the production started from a screenplay). */
+  storyText: text("story_text"),
+  /** Chapter 2: the screenplay the later stages read (uploaded, edited, or generated from the story). */
   scriptText: text("script_text"),
+  /** How chapter 2 gets its screenplay: written from the story ("adapt") or provided by the user ("own"). */
+  scriptMode: text("script_mode", { enum: ["adapt", "own"] }),
+  /** Index of the last chapter the user approved (-1: none). Stages of later chapters do not run. */
+  approvedThrough: integer("approved_through").notNull().default(-1),
   scriptGenerated: boolean("script_generated").notNull().default(false),
   scriptDocId: integer("script_doc_id").references(() => documents.id, { onDelete: "set null" }),
   costumesName: text("costumes_name"),

@@ -29,19 +29,30 @@ export const intakeStage: StageDef<IntakeReport> = {
   title: "Intake",
   summary: "Detect screenplay or story, convert or adapt it, and measure scenes, pages and running time.",
   async step({ ctx, run }) {
-    const c = classifyInput(run.inputText, run.sourceName);
     const warnings: string[] = [];
-    let scriptText = c.text;
     let adaptation: IntakeReport["adaptation"];
+    let generated = run.scriptGenerated;
+    let c: ReturnType<typeof classifyInput>;
+    let scriptText: string;
 
-    if (c.kind === "story") {
-      if (!ctx.gateway) throw new Error("Adapting a story into scenes needs a model. Configure a model key, or upload a screenplay.");
-      const a = await adaptStory(ctx, run.title, c.text);
+    if (run.scriptText) {
+      c = classifyInput(run.scriptText, run.sourceName);
+      if (c.kind !== "screenplay") {
+        throw new Error("This does not read as a screenplay (no scene headings such as INT. KITCHEN - DAY). Paste a screenplay, or have it written from the story.");
+      }
+      scriptText = c.text; // Final Draft converted to Fountain
+    } else if (run.scriptMode === "adapt" && run.storyText) {
+      if (!ctx.gateway) throw new Error("Writing a screenplay from the story needs a model. Configure a model key, or provide your own screenplay.");
+      c = classifyInput(run.storyText);
+      const a = await adaptStory(ctx, run.title, run.storyText);
       scriptText = a.fountain;
+      generated = true;
       adaptation = { model: a.model, cacheHit: a.cacheHit, unsupportedScenes: a.unsupportedScenes };
       if (a.unsupportedScenes.length) {
         warnings.push(`Generated scene${a.unsupportedScenes.length > 1 ? "s" : ""} ${a.unsupportedScenes.join(", ")} could not be traced to a quoted passage of the story. Check them against your story.`);
       }
+    } else {
+      return { done: false, awaiting: "Choose how the screenplay is made: write it from the story, or provide your own." };
     }
 
     const parsed = parseFountain(scriptText);
@@ -63,13 +74,13 @@ export const intakeStage: StageDef<IntakeReport> = {
 
     return {
       done: true,
-      runPatch: { scriptText, scriptGenerated: c.kind === "story" },
+      runPatch: { scriptText, scriptGenerated: generated },
       report: {
-        kind: c.kind,
+        kind: generated ? "story" : "screenplay",
         format: c.format,
-        reason: c.reason,
+        reason: generated ? "written from the approved story" : c.reason,
         words: c.words,
-        generated: c.kind === "story",
+        generated,
         adaptation,
         title: parsed.titlePage.title ?? null,
         scenes,

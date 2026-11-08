@@ -31,6 +31,13 @@ export const continuityStage: StageDef<ContinuityReport> = {
       { script: { name: scriptDocName(run), text: run.scriptText }, costumes: file(run.costumesName, run.costumesText), locations: file(run.locationsName, run.locationsText) },
       { deadline },
     );
+    if (r.skippedScenes > 0) {
+      // A partly read script is not a tested script: fail, so the chapter cannot be approved on it.
+      // Retrying re-reads only these scenes; the others are cached.
+      throw new Error(
+        `${r.skippedScenes} of ${r.sceneCount} scenes could not be read by any model (see Pipeline health for the reason, often an exhausted model quota). Try again once the model is available.`,
+      );
+    }
     if (r.deferredScenes > 0) {
       return { done: false, progress: `read ${r.sceneCount - r.deferredScenes} of ${r.sceneCount} scenes`, runPatch: { scriptDocId: r.scriptDocId } };
     }

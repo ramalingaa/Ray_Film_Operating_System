@@ -28,7 +28,8 @@ export function RunDriver({ runId, active }: { runId: number; active: boolean })
           failures = 0;
           setError(null);
           router.refresh();
-          if (o.state === "done" || o.state === "failed") return;
+          // Stop whenever the production needs a person: review, a choice, a failure, or the greenlight.
+          if (o.state !== "progress" && o.state !== "busy") return;
           // Another tab or request holds the run: wait before asking again.
           if (o.state === "busy") await sleep(4000);
         } catch (err) {
@@ -47,9 +48,10 @@ export function RunDriver({ runId, active }: { runId: number; active: boolean })
 
   if (!active) return null;
   return (
-    <p className="text-sm text-sky-700 dark:text-sky-300">
-      Working… keep this page open; reports appear as each stage finishes.
-      {error && <span className="ml-2 text-red-700 dark:text-red-400">(retrying after an error: {error})</span>}
+    <p className="text-sm text-ink-soft">
+      <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-gold align-middle" />
+      Working… keep this page open; each report appears as soon as it is ready.
+      {error && <span className="ml-2 text-rose">(retrying after an error: {error})</span>}
     </p>
   );
 }

@@ -16,6 +16,8 @@ export interface StepResult<R> {
   /** False when the stage made progress but has more to do (call it again). */
   done: boolean;
   progress?: string;
+  /** Set (with done = false) when the stage cannot continue without the user, e.g. a choice to make. */
+  awaiting?: string;
   report?: R;
   /** Fields to save on the run (e.g. the script text produced by intake). */
   runPatch?: Partial<Pick<RunRow, "scriptText" | "scriptGenerated" | "scriptDocId" | "title">>;

@@ -1,26 +1,172 @@
 @import "tailwindcss";
 
+/*
+ * ReelGraph storybook theme: parchment and ink by day, a starry sky by night,
+ * gold for everything that moves the production forward.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --paper: #fbf6ec;
+  --paper-2: #f4ecdb;
+  --card: #fffdf8;
+  --ink: #1c2045;
+  --ink-soft: #4a4f72;
+  --muted: #7b7f99;
+  --line: #e8dcc2;
+  --gold: #b8892e;
+  --gold-bright: #d9ae4f;
+  --gold-soft: #f5e6bf;
+  --rose: #b85c6e;
+  --sky-1: #0b1030;
+  --sky-2: #1b2459;
+  --sky-3: #3a2a6b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #0d1233;
+    --paper-2: #121941;
+    --card: #151d49;
+    --ink: #f4ecda;
+    --ink-soft: #d3cbe6;
+    --muted: #9a9cc0;
+    --line: #2b3470;
+    --gold: #e3bd62;
+    --gold-bright: #f2d27e;
+    --gold-soft: #3b3463;
+    --rose: #e79aa9;
   }
 }
 
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-gold: var(--gold);
+  --color-gold-bright: var(--gold-bright);
+  --color-gold-soft: var(--gold-soft);
+  --color-rose: var(--rose);
+  --color-sky-1: var(--sky-1);
+  --color-sky-2: var(--sky-2);
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-display: var(--font-display-serif), Georgia, serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/* A night sky with a scatter of stars, used for heroes and the top bar. */
+.night-sky {
+  color: #f6efdc;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 68%, #fff9 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 41% 31%, #fffa 50%, transparent 51%),
+    radial-gradient(1px 1px at 57% 12%, #fff7 50%, transparent 51%),
+    radial-gradient(2px 2px at 68% 55%, #ffe9a8cc 50%, transparent 51%),
+    radial-gradient(1px 1px at 79% 27%, #fff9 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 88% 74%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 94% 15%, #fffa 50%, transparent 51%),
+    radial-gradient(1px 1px at 6% 82%, #fff7 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 50% 88%, #fff6 50%, transparent 51%),
+    radial-gradient(ellipse 80% 60% at 80% 0%, #6b4fa055, transparent 70%),
+    radial-gradient(ellipse 70% 80% at 0% 100%, #1f6f8b33, transparent 70%),
+    linear-gradient(160deg, var(--sky-1), var(--sky-2) 55%, var(--sky-3));
+}
+
+.font-display {
+  font-family: var(--font-display-serif), Georgia, serif;
+  letter-spacing: 0.01em;
+}
+
+.gold-text {
+  background: linear-gradient(90deg, #e9c46a, #f7e3a1 45%, #d4a24c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-gold {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.6rem 1.25rem;
+  font-weight: 600;
+  color: #2a1e05;
+  background: linear-gradient(180deg, #f3d78a, #d9aa48);
+  box-shadow: 0 1px 0 #fff6 inset, 0 6px 18px -6px #b8892e99;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.btn-gold:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 #fff6 inset, 0 10px 24px -8px #b8892ecc;
+  filter: brightness(1.04);
+}
+.btn-gold:disabled {
+  opacity: 0.5;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--card);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost:hover {
+  border-color: var(--gold);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 0 #fff8 inset, 0 12px 30px -20px #1c204540;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 0.6rem 0.8rem;
+}
+.field:focus {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 1px;
+}
+
+/* A soft twinkle for the current chapter's star. */
+@keyframes twinkle {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 #e9c46a66, 0 0 18px 2px #e9c46a55;
+  }
+  50% {
+    box-shadow: 0 0 0 6px #e9c46a22, 0 0 28px 6px #e9c46a77;
+  }
+}
+.twinkle {
+  animation: twinkle 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .twinkle {
+    animation: none;
+  }
 }

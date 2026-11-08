@@ -1,0 +1,147 @@
+/**
+ * Chapter 1 — Story. Tests a prose story before any screenplay exists: logline
+ * elements, which of the 15 beats are present and where, setups, strengths
+ * and the producer's questions. Every citation is verified against the story
+ * text; beat positions are measured by code. Skipped for productions that
+ * started from a screenplay.
+ */
+import { z } from "zod";
+import { cachedGenerate } from "../agents/cached";
+import { STORY_DRAFT_PROMPT_VERSION, STORY_DRAFT_SYSTEM, storyDraftUserPrompt } from "../extract/prompts";
+import { verifySource } from "../extract/provenance";
+import { wordCount } from "../intake/classify";
+import { BEAT_IDS, BEATS, beatTiming, outOfOrder, pct, type BeatId, type BeatTiming } from "../story/beats";
+import { numberedScript, type Skipped, type StoryIssue } from "./story";
+import type { Cite, StageDef } from "./types";
+
+const cite = {
+  source_line: z.number().int().nullable(),
+  source_snippet: z.string().nullable(),
+};
+
+export const StoryDraftSchema = z.object({
+  logline: z.object({
+    protagonist: z.string().nullable(),
+    goal: z.string().nullable(),
+    stakes: z.string().nullable(),
+    obstacle: z.string().nullable(),
+    one_sentence: z.string(),
+    missing: z.array(z.string()),
+    ...cite,
+  }),
+  beats: z.array(z.object({ beat: z.enum(BEAT_IDS), present: z.boolean(), note: z.string(), ...cite })),
+  setups: z.array(z.object({ description: z.string(), paid_off: z.boolean(), ...cite })),
+  strengths: z.array(z.object({ point: z.string(), ...cite })),
+  questions: z.array(z.object({ question: z.string(), why: z.string() })),
+});
+export type StoryDraft = z.infer<typeof StoryDraftSchema>;
+
+export interface StoryTestReport {
+  model: string;
+  cacheHit: boolean;
+  words: number;
+  /** Too short (a logline or paragraph) for beat positions to mean anything. */
+  tooShortToTime: boolean;
+  logline: Omit<StoryDraft["logline"], "source_line" | "source_snippet"> & { cite?: Cite };
+  beats: { id: BeatId; title: string; present: boolean; position: number | null; expected: string; timing: BeatTiming; note: string; cite?: Cite }[];
+  setups: { description: string; paidOff: boolean; cite?: Cite }[];
+  strengths: { point: string; cite?: Cite }[];
+  questions: StoryDraft["questions"];
+  issues: StoryIssue[];
+  dropped: string[];
+}
+
+const SHORT_WORDS = 400;
+
+/** Pure: verify and measure a development read of `story`. */
+export function buildStoryTestReport(a: StoryDraft, story: string, meta: { model: string; cacheHit: boolean }): StoryTestReport {
+  const text = story.replace(/\r\n?/g, "\n");
+  const lines = text.split("\n");
+  const whole = { startLine: 1, text };
+  const dropped: string[] = [];
+  const words = wordCount(text);
+  const tooShortToTime = words < SHORT_WORDS;
+  const offsetOf = (line: number) => lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0);
+
+  const check = (what: string, line: number | null, snippet: string | null): Cite | undefined => {
+    if (line == null || !snippet) return undefined;
+    const v = verifySource(whole, line, snippet);
+    if (v.ok) return { docName: "story", line: v.line, snippet: v.snippet };
+    dropped.push(`${what}: the quoted words were not found in the story`);
+    return undefined;
+  };
+
+  const beats: StoryTestReport["beats"] = BEATS.map((b) => {
+    const m = a.beats.find((x) => x.beat === b.id);
+    const c = m?.present ? check(b.title, m.source_line, m.source_snippet) : undefined;
+    const present = !!m?.present && !!c;
+    const position = c && !tooShortToTime ? Math.min(1, offsetOf(c.line) / Math.max(1, text.length)) : null;
+    return {
+      id: b.id,
+      title: b.title,
+      present,
+      position,
+      expected: `${pct(b.range[0])}–${pct(b.range[1])}`,
+      timing: present ? (position == null ? "on_time" : beatTiming(b.id, position)) : "missing",
+      note: m?.note ?? "Not addressed.",
+      cite: c,
+    };
+  });
+
+  const issues: StoryIssue[] = [];
+  const loglineCite = check("logline", a.logline.source_line, a.logline.source_snippet);
+  const core = a.logline.missing.filter((m) => /protagonist|goal/i.test(m));
+  if (core.length) issues.push({ severity: "high", title: `The ${core.join(" and ")} ${core.length > 1 ? "are" : "is"} not clear yet`, detail: a.logline.one_sentence, cites: loglineCite ? [loglineCite] : [] });
+  const rest = a.logline.missing.filter((m) => !/protagonist|goal/i.test(m));
+  if (rest.length) issues.push({ severity: "medium", title: `Not clear yet: ${rest.join(", ")}`, detail: a.logline.one_sentence, cites: loglineCite ? [loglineCite] : [] });
+
+  const missingSeverity = tooShortToTime ? "low" : "medium";
+  for (const b of beats.filter((x) => !x.present)) issues.push({ severity: missingSeverity, title: `No ${b.title} yet`, detail: b.note, cites: [] });
+  for (const b of beats.filter((x) => x.present && x.timing !== "on_time")) {
+    issues.push({ severity: "low", title: `${b.title} comes ${b.timing} (${pct(b.position!)} of the story)`, detail: `It usually lands at ${b.expected}. ${b.note}`, cites: b.cite ? [b.cite] : [] });
+  }
+  const positions = Object.fromEntries(beats.filter((b) => b.position != null).map((b) => [b.id, b.position!])) as Partial<Record<BeatId, number>>;
+  for (const [x, y] of outOfOrder(positions)) {
+    const bx = BEATS.find((b) => b.id === x)!.title;
+    const by = BEATS.find((b) => b.id === y)!.title;
+    issues.push({ severity: "medium", title: `${bx} comes after ${by}`, detail: "The turning points are out of their usual order.", cites: [] });
+  }
+
+  const setups = a.setups.map((s) => ({ description: s.description, paidOff: s.paid_off, cite: check(`setup "${s.description}"`, s.source_line, s.source_snippet) }));
+  for (const s of setups.filter((x) => !x.paidOff)) issues.push({ severity: "medium", title: "Set up, never paid off", detail: s.description, cites: s.cite ? [s.cite] : [] });
+
+  const rank = { high: 0, medium: 1, low: 2 };
+  issues.sort((p, q) => rank[p.severity] - rank[q.severity]);
+  return {
+    ...meta,
+    words,
+    tooShortToTime,
+    logline: { protagonist: a.logline.protagonist, goal: a.logline.goal, stakes: a.logline.stakes, obstacle: a.logline.obstacle, one_sentence: a.logline.one_sentence, missing: a.logline.missing, cite: loglineCite },
+    beats,
+    setups,
+    strengths: a.strengths.map((s) => ({ point: s.point, cite: check("strength", s.source_line, s.source_snippet) })),
+    questions: a.questions,
+    issues,
+    dropped,
+  };
+}
+
+export const storyTestStage: StageDef<StoryTestReport | Skipped> = {
+  id: "story_test",
+  title: "Story test",
+  summary: "A development read of the story: logline, the 15 beats, setups, strengths and the questions a producer would ask.",
+  async step({ ctx, run }) {
+    if (!run.storyText) return { done: true, report: { skipped: "This production started from a screenplay." } };
+    if (!ctx.gateway) return { done: true, report: { skipped: "Testing a story needs a model, and none is configured." } };
+    const r = await cachedGenerate(
+      ctx,
+      "extract",
+      STORY_DRAFT_PROMPT_VERSION,
+      { system: STORY_DRAFT_SYSTEM, user: storyDraftUserPrompt(run.title, numberedScript(run.storyText)), schema: StoryDraftSchema, schemaName: "story_draft", maxTokens: 12000 },
+      "story-developer",
+    );
+    const report = buildStoryTestReport(r.data, run.storyText, { model: r.model, cacheHit: r.cacheHit });
+    for (const d of report.dropped) await ctx.ledger.issue("story-developer", "warning", `run ${run.id}`, d);
+    return { done: true, report };
+  },
+};

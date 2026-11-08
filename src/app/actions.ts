@@ -12,7 +12,17 @@ import { getDb } from "@/lib/db/client";
 import { dismissals, findings } from "@/lib/db/schema";
 import { applySceneEdit, applyScriptEdit } from "@/lib/impact/apply";
 import { availableGateway } from "@/lib/llm/available";
-import { createRun, retryRun, stepRun, type StepOutcome } from "@/lib/pipeline/runs";
+import {
+  approveChapter,
+  createRun,
+  reopenChapter,
+  retryRun,
+  setScript,
+  stepRun,
+  updateStory,
+  writeScriptFromStory,
+  type StepOutcome,
+} from "@/lib/pipeline/runs";
 
 async function findingById(id: number) {
   const [f] = await (await getDb()).select().from(findings).where(eq(findings.id, id));
@@ -128,4 +138,44 @@ export async function advanceRun(runId: number): Promise<StepOutcome> {
 export async function retryFailedRun(formData: FormData) {
   await retryRun(await getDb(), Number(formData.get("id")));
   refresh();
+}
+
+/** Start a production from the sample story in data/. */
+export async function startSampleStory() {
+  const text = fs.readFileSync(path.join(process.cwd(), "data", "sample-story.txt"), "utf8");
+  const id = await createRun(await getDb(), { title: "The Night Ferry", sourceName: "sample story", text });
+  kickOff(id);
+  redirect(`/runs/${id}`);
+}
+
+// ---- chapter gates -------------------------------------------------------------------
+
+const runId = (formData: FormData) => Number(formData.get("id"));
+
+export async function approveChapterAction(formData: FormData) {
+  await approveChapter(await getDb(), runId(formData), Number(formData.get("chapter")));
+  redirect(`/runs/${runId(formData)}`);
+}
+
+export async function reopenChapterAction(formData: FormData) {
+  const chapter = Number(formData.get("chapter"));
+  await reopenChapter(await getDb(), runId(formData), chapter);
+  redirect(`/runs/${runId(formData)}?chapter=${chapter}`);
+}
+
+export async function updateStoryAction(formData: FormData) {
+  await updateStory(await getDb(), runId(formData), String(formData.get("story") ?? ""));
+  redirect(`/runs/${runId(formData)}?chapter=0`);
+}
+
+export async function setScriptAction(formData: FormData) {
+  const file = await fileText(formData, "file");
+  const text = file?.text ?? String(formData.get("script") ?? "");
+  await setScript(await getDb(), runId(formData), text);
+  redirect(`/runs/${runId(formData)}?chapter=1`);
+}
+
+export async function writeScriptAction(formData: FormData) {
+  await writeScriptFromStory(await getDb(), runId(formData));
+  redirect(`/runs/${runId(formData)}?chapter=1`);
 }

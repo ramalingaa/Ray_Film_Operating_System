@@ -11,7 +11,7 @@ export function ContinuityReportView({ r, review }: { r: ContinuityReport; revie
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Open conflicts" value={r.findings.open} hint={`${r.findings.total} found in total`} />
         <Stat label="High / medium / low" value={`${r.findings.bySeverity.high} / ${r.findings.bySeverity.medium} / ${r.findings.bySeverity.low}`} />
-        <Stat label="Scenes read by the model" value={r.extraction.model ? `${r.extraction.extracted - r.extraction.skipped} of ${r.sceneCount}` : "none"} hint={r.extraction.model ? `${r.extraction.cached} from cache` : "no model configured"} />
+        <Stat label="Scenes read by the model" value={r.extraction.model ? `${r.extraction.extracted} of ${r.sceneCount}` : "none"} hint={r.extraction.model ? `${r.extraction.cached} from cache` : "no model configured"} />
         <Stat label="Possible conflicts judged" value={r.judge.candidates} hint={`${r.judge.accepted} confirmed, ${r.judge.rejected} rejected`} />
       </div>
       {r.extraction.dropped > 0 && <p className="mb-2 text-xs text-zinc-500">{r.extraction.dropped} extracted item(s) were dropped because their quoted line could not be found in the scene.</p>}

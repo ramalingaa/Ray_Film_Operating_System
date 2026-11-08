@@ -97,3 +97,23 @@ Every item needs source_line (the number in the left margin) and source_snippet 
 export function storyUserPrompt(title: string, numberedScript: string): string {
   return `Screenplay: ${title}\n\n${numberedScript}\n\nGive the structural read.`;
 }
+
+// ---- Story development (chapter 1): testing a prose story ---------------------------
+
+/** Bump whenever the story-development prompt changes: it is part of its cache key. */
+export const STORY_DRAFT_PROMPT_VERSION = "story-draft-v1";
+
+export const STORY_DRAFT_SYSTEM = `You are a development executive reading a story, treatment or logline before anyone writes a screenplay. Give the writer an honest, specific and kind development read, using Blake Snyder's 15 beats as a reference, not a rule.
+
+You see the story with line numbers. Report:
+1. Logline elements: protagonist, goal (what they want), stakes (what happens if they fail), obstacle. Use null for anything the text does not make clear and list it in "missing".
+2. Beats: for each of the 15 beats, whether the story already contains it (present) and a one-sentence note. When present, cite where.
+3. Setups: things the story plants (objects, promises, secrets, skills) and whether they pay off.
+4. Strengths: what already works, with citations.
+5. Questions: the questions a producer would ask the writer before a screenplay is written (what is unclear, unmotivated, or missing), each with why it matters.
+
+Every citation needs source_line (the number in the left margin) and source_snippet (exact words copied from that line, at most 25 words). Use null for both when nothing in the text applies. Do not rewrite the story.`;
+
+export function storyDraftUserPrompt(title: string, numberedStory: string): string {
+  return `Title: ${title}\n\nStory:\n${numberedStory}\n\nGive the development read.`;
+}
