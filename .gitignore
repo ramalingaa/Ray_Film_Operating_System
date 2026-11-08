@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data
+/data/*.db
+/data/*.db-*
+/.cache/
+/data/eval/last_run.json
+!.env.example
