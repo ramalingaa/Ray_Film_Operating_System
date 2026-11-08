@@ -85,6 +85,11 @@ export const breakdownStage: StageDef<BreakdownReport> = {
           elements.push({ category: "minor", item: `${a.name} (${a.age})`, detail: "age stated in the script", cite: { docName, line: a.line, snippet: a.snippet, sceneNumber: p.number } });
         }
       }
+      // A character introduced with an age ("YOUNG MAYA (8)") is present, even if silent.
+      for (const a of statedAges(p)) {
+        const n = a.name.toUpperCase();
+        if (!cast.some((c) => c.toUpperCase() === n || c.toUpperCase().endsWith(` ${n}`) || n.endsWith(` ${c.toUpperCase()}`))) cast.push(a.name);
+      }
       const eighths = sceneEighths(p);
       return { number: p.number, heading: p.heading, intExt: p.intExt, time: p.timeOfDay, eighths, pages: formatEighths(eighths), storyDay: info?.storyDay ?? null, cast, wardrobe, props, elements };
     });

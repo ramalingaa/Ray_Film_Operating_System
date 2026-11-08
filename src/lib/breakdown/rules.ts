@@ -72,3 +72,16 @@ export function statedAges(scene: Pick<ParsedScene, "elements">): StatedAge[] {
 }
 
 export const isMinor = (a: StatedAge) => !a.approximate && a.age < 18;
+
+/**
+ * Cast names that belong to minors, from the breakdown's minor elements
+ * ("KIRAN", "YOUNG MAYA (8)"). A minor is identified once (where the age is
+ * stated) but works every scene their name appears in.
+ */
+export function minorMatcher(minorItems: string[]): (castName: string) => boolean {
+  const names = [...new Set(minorItems.map((i) => i.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase()).filter(Boolean))];
+  return (castName: string) => {
+    const c = castName.toUpperCase();
+    return names.some((m) => c === m || c.endsWith(` ${m}`) || m.endsWith(` ${c}`));
+  };
+}

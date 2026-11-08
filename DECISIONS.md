@@ -195,3 +195,18 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 51. **Locations group scenes by resolved location entity** (INT and EXT of
     the same place are one set). Flags: missing from the sheet, needed by day
     and night, and one-off sets of a quarter page or less.
+52. **The draft schedule is a heuristic, not an optimizer**: day work and
+    night work on separate days (days first, so no night-to-day turnaround),
+    scenes grouped by set (largest first), packed to a page budget per day
+    (`SCHEDULE_PAGES_PER_DAY`, default 5). CONTINUOUS and MOMENTS LATER
+    inherit the previous scene's day or night. A constraint solver (cast
+    availability, stop dates, weather cover) is a later step.
+53. **Holding days** are the days between a performer's first and last work
+    day on which they do not work; they are reported and costed as paid.
+54. **The budget is a rough top sheet with placeholder rates** (short or
+    feature tier by page count), overridable with `BUDGET_RATES` JSON. Every
+    line shows quantity × rate and the scenes or days behind it. Prep, wrap,
+    travel, insurance, legal, music and marketing are excluded and say so.
+55. **A child is identified once but counted everywhere they work**: the
+    studio teacher and the night-work check follow the child's name through
+    every scene, not only the scene where their age is stated.

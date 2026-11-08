@@ -3,12 +3,22 @@
 A story graph for film: from a one-line logline to a pre-production package,
 with every fact traced to its source line and every conflict flagged.
 
-The current phase is the **continuity checker** proof of concept
-(`docs/spec-continuity-poc.md`). It ingests a Fountain screenplay plus costume
-and location sheets, extracts a story bible with any LLM, flags continuity
-conflicts with exact citations, and shows the ripple effect of an edit. See
-`ARCHITECTURE.md` for the full design and `DECISIONS.md` for every judgment
-call.
+Upload or paste a **screenplay** (Fountain, Final Draft `.fdx`, plain text) or
+a **story** (prose, treatment, logline) and the app runs it through seven
+stages, each with its own report:
+
+| # | Stage | What it tells you |
+|---|---|---|
+| 1 | Intake | Screenplay or story, scenes, page eighths, running time, format problems. A story is adapted into a generated scene outline. |
+| 2 | Story | Logline elements, the 15 beats and where they land, a card per scene, scenes that do not turn, setups never paid off |
+| 3 | Continuity | The eight continuity checks with exact citations (review, dismiss, follow up) |
+| 4 | Breakdown | Cast, wardrobe, props, extras, vehicles, animals, stunts, weapons, effects, minors per scene, and alerts for each department |
+| 5 | Locations | Sets, interior/exterior and day/night needs, sheet coverage, one-off company moves |
+| 6 | Schedule | Draft stripboard, day-out-of-days, night-turnaround, child-hours, company-move and holding-day checks |
+| 7 | Budget | Rough top sheet from the schedule; every line shows quantity × rate and its source |
+
+Every finding cites the document and line it comes from. See
+`docs/spec-production-pipeline.md`, `ARCHITECTURE.md` and `DECISIONS.md`.
 
 ## Quick start
 
@@ -32,7 +42,7 @@ deterministic checks work, and the app tells you which steps were skipped.
 | `npm run impact -- --script edited.fountain` | Save an edited script as the next version and print what it touches |
 | `npm run impact -- --from 1 --to 2` | Compare any two stored versions |
 | `npm run eval` | Score the checks against 20 planted errors in `data/eval/` |
-| `npm run typecheck` / `npm test` | Types and the 91-test suite |
+| `npm run typecheck` / `npm test` | Types and the test suite |
 
 Add `--no-models` to any command to skip model calls.
 
@@ -53,8 +63,9 @@ screenplay, or load the bundled sample.
 
 ## The app
 
-- **Load script**: upload a Fountain screenplay and optional costume and
-  location sheets, or load the sample. Extraction and every check run on upload.
+- **Analyze** (home): upload or paste a screenplay or story, with optional
+  costume and location sheets, or run the sample. Opens the run page, which
+  steps through the stages and shows each report as it finishes.
 - **Review**: the script with line numbers next to the findings, grouped by
   severity. Click a finding to see the conflict in plain language and the exact
   lines it comes from. Dismiss it as intentional (with a reason) or flag it for

@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { eq } from "drizzle-orm";
-import { isMinor, statedAges } from "@/lib/breakdown/rules";
+import { isMinor, minorMatcher, statedAges } from "@/lib/breakdown/rules";
 import { openDb } from "@/lib/db/client";
 import { runStages } from "@/lib/db/schema";
 import { parseFountain } from "@/lib/fountain";
 import { ModelGateway } from "@/lib/llm/gateway";
 import { createRun, runToEnd } from "@/lib/pipeline/runs";
 import type { BreakdownReport } from "@/lib/stages/breakdown";
+import type { BudgetReport } from "@/lib/stages/budget";
 import type { LocationsReport } from "@/lib/stages/locations";
+import type { ScheduleReport } from "@/lib/stages/schedule";
+import { rateCard } from "@/lib/budget/rates";
+import { dayOutOfDays, lightOf, planDays } from "@/lib/schedule/plan";
 import { CLEAN_PLAN, planExtractor } from "./helpers/placeholder-plan";
 import { routerModel } from "./helpers/router-model";
 
@@ -37,7 +41,12 @@ async function runSample(text = script, extraSheets: Partial<typeof sheets> = sh
   expect(await runToEnd(db, id, { gateway, judgeSettings })).toEqual({ state: "done" });
   const rows = await db.select().from(runStages).where(eq(runStages.runId, id));
   const report = <T,>(stage: string) => JSON.parse(rows.find((r) => r.stage === stage)!.reportJson!) as T;
-  return { breakdown: report<BreakdownReport>("breakdown"), locations: report<LocationsReport>("locations") };
+  return {
+    breakdown: report<BreakdownReport>("breakdown"),
+    locations: report<LocationsReport>("locations"),
+    schedule: report<ScheduleReport>("schedule"),
+    budget: report<BudgetReport>("budget"),
+  };
 }
 
 describe("stated ages", () => {
@@ -50,6 +59,16 @@ describe("stated ages", () => {
       ["FATHER", 40, false],
     ]);
     expect(ages[0]).toMatchObject({ line: 85, snippet: "YOUNG MAYA (8)" });
+  });
+});
+
+describe("minor matching", () => {
+  it("matches a child by name wherever they appear, without matching adults who share a word", () => {
+    const isMinor = minorMatcher(["YOUNG MAYA (8)", "KIRAN"]);
+    expect(isMinor("YOUNG MAYA")).toBe(true);
+    expect(isMinor("Kiran")).toBe(true);
+    expect(isMinor("MAYA REYES")).toBe(false);
+    expect(isMinor("MAYA")).toBe(true); // "YOUNG MAYA" ends with " MAYA": ambiguous names count as the child, the safe side
   });
 });
 
@@ -100,5 +119,59 @@ describe("locations stage", () => {
     const { locations: l } = await runSample(script, {});
     expect(l.sheetGiven).toBe(false);
     expect(l.sets.every((s) => s.onSheet === null)).toBe(true);
+  });
+});
+
+describe("schedule planning", () => {
+  const strip = (scene: string, set: string, light: "day" | "night", eighths: number, cast: string[] = []) => ({ scene, set, intExt: "INT", time: light.toUpperCase(), light, eighths, cast, line: 1, heading: scene });
+
+  it("carries day or night through CONTINUOUS and MOMENTS LATER", () => {
+    expect(lightOf(["NIGHT", "CONTINUOUS", "MOMENTS LATER", "MORNING", "CONTINUOUS", "DUSK"])).toEqual(["night", "night", "night", "day", "day", "day"]);
+  });
+
+  it("keeps day and night work on separate days, groups by set, and respects the page budget", () => {
+    const days = planDays([strip("1", "A", "night", 8), strip("2", "B", "day", 30), strip("3", "A", "day", 20), strip("4", "B", "day", 20), strip("5", "A", "night", 8)], 40);
+    expect(days.map((d) => [d.light, d.strips.map((s) => s.scene)])).toEqual([
+      ["day", ["2"]],
+      ["day", ["4", "3"]],
+      ["night", ["1", "5"]],
+    ]);
+    expect(days.every((d) => d.eighths <= 40 || d.strips.length === 1)).toBe(true);
+  });
+
+  it("counts holding days between a performer's first and last work day", () => {
+    const days = planDays([strip("1", "A", "day", 40, ["ANA"]), strip("2", "B", "day", 40, ["BO"]), strip("3", "C", "day", 40, ["ANA"])], 40);
+    expect(dayOutOfDays(days).find((c) => c.name === "ANA")).toMatchObject({ workDays: [1, 3], holdDays: [2] });
+  });
+});
+
+describe("schedule and budget stages", () => {
+  it("schedules the sample and costs it, with every line traceable", async () => {
+    const { schedule: s, budget: b } = await runSample();
+    expect(s.totals.shootDays).toBeGreaterThanOrEqual(2);
+    const scheduled = s.days.flatMap((d) => d.strips.map((x) => x.scene)).sort((x, y) => Number(x) - Number(y));
+    expect(scheduled).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+    expect(s.days.find((d) => d.strips.some((x) => x.scene === "2"))?.light).toBe("night"); // CONTINUOUS after a night scene
+
+    expect(b.total).toBe(b.lines.reduce((n, l) => n + l.amount, 0));
+    const labels = b.lines.map((l) => l.label);
+    expect(labels).toEqual(expect.arrayContaining(["Shooting crew", "Stunt coordinator", "Fire safety officer", "Picture vehicles", "Studio teacher (child performers)", "Night lighting and generator"]));
+    const contingency = b.lines.find((l) => l.section === "Contingency")!;
+    const subtotal = b.lines.filter((l) => l.section !== "Contingency").reduce((n, l) => n + l.amount, 0);
+    expect(contingency.amount).toBe(Math.round(subtotal * 0.1));
+    for (const l of b.lines) expect(l.basis.length).toBeGreaterThan(0);
+  });
+
+  it("flags child performers on a night shoot day", async () => {
+    const night = script.replace("INT. LIGHTHOUSE - DAY (FLASHBACK)", "INT. LIGHTHOUSE - NIGHT (FLASHBACK)");
+    const { schedule: s } = await runSample(night);
+    expect(s.checks.find((c) => /^Child performers? on night shoot day/.test(c.title))).toMatchObject({ severity: "high" });
+  });
+
+  it("uses overridden rates", () => {
+    const { rates, overridden } = rateCard(false, { BUDGET_RATES: '{"crewDay": 1, "currency": "INR", "bogus": 5}' });
+    expect(rates).toMatchObject({ crewDay: 1, currency: "INR" });
+    expect(overridden).toEqual(["crewDay", "currency"]);
+    expect(() => rateCard(false, { BUDGET_RATES: "{nope" })).toThrow(/not valid JSON/);
   });
 });

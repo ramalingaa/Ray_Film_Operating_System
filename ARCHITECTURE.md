@@ -143,6 +143,17 @@ Stages 1 to 4 and 6 to 10 come after the PoC. The PoC accepts a hand-written
 script and hand-made sheets, so the evaluation layer is proven before
 generation is layered on top.
 
+### Built so far (runs)
+
+`src/lib/pipeline/runs.ts` executes a run as ordered stages
+(`src/lib/stages/`): Intake → Story → Continuity → Breakdown → Locations →
+Schedule → Budget. Each stage is a step function that does as much as fits in
+a time budget and saves either progress or its report (`run_stages`). Model
+stages (adaptation, story read, scene extraction, judging) are cached; the
+production stages after Continuity are pure code over the story graph and the
+earlier reports. The run page drives the steps; a lease on `runs` keeps steps
+from overlapping.
+
 ## 7. Change impact
 
 Editing a scene re-parses the script, re-extracts only scenes whose text hash
