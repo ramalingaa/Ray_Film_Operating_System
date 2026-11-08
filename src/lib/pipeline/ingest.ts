@@ -1,0 +1,415 @@
+/**
+ * Ingest orchestrator: documents → scenes → per-scene extraction agent →
+ * provenance verification → entity resolution → story days → facts.
+ *
+ * Deterministic facts (cues, headings, explicit days, sheets) are always
+ * written. Model facts are added when a gateway is available. Every dropped
+ * item, skipped scene, or ambiguity becomes a pipeline issue.
+ */
+import crypto from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
+import { runAgent, type AgentContext } from "../agents/runtime";
+import type { Db } from "../db/client";
+import { documents, entities, entityMerges, facts, scenes } from "../db/schema";
+import { sceneExtractor } from "../extract/agent";
+import {
+  normalizeCharacterName,
+  normalizeLocationName,
+  normalizePropName,
+  resolveCharacters,
+  resolveLocations,
+  resolveProps,
+  type Merge,
+} from "../extract/entities";
+import { verifySource } from "../extract/provenance";
+import type { SceneExtraction } from "../extract/schema";
+import { resolveStoryDays, type DayEvidence } from "../extract/story-days";
+import { parseFountain, type ParsedScene } from "../fountain";
+import { parseCostumeSheet, parseLocationSheet, type CostumeRow, type LocationRow } from "../sheets";
+
+type DocKind = "script" | "costume_sheet" | "location_sheet";
+type FactInsert = typeof facts.$inferInsert;
+type EntityKind = "character" | "location" | "prop";
+
+export interface SourceFile {
+  name: string;
+  text: string;
+}
+
+export interface IngestInput {
+  script: SourceFile;
+  costumes?: SourceFile;
+  locations?: SourceFile;
+}
+
+export interface IngestReport {
+  scriptDocId: number;
+  scriptVersion: number;
+  costumeDocId?: number;
+  locationDocId?: number;
+  sceneCount: number;
+  factCount: number;
+  extractedScenes: number;
+  cachedScenes: number;
+  skippedScenes: number;
+  droppedItems: number;
+}
+
+const hash = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+/** Same content → same document (derived rows rebuilt). New content → new version. */
+function upsertDocument(db: Db, kind: DocKind, file: SourceFile): { id: number; version: number } {
+  const contentHash = hash(file.text);
+  const latest = db.select().from(documents).where(eq(documents.name, file.name)).orderBy(desc(documents.version)).limit(1).get();
+  if (latest && latest.contentHash === contentHash && latest.kind === kind) {
+    db.delete(facts).where(eq(facts.sourceDocId, latest.id)).run();
+    db.delete(scenes).where(eq(scenes.docId, latest.id)).run();
+    return { id: latest.id, version: latest.version };
+  }
+  const version = (latest?.version ?? 0) + 1;
+  const row = db
+    .insert(documents)
+    .values({ kind, name: file.name, version, rawText: file.text, contentHash })
+    .returning({ id: documents.id })
+    .get();
+  return { id: row.id, version };
+}
+
+/** A short, deterministic recap of earlier scenes so the model can resolve names and days. */
+function buildSummary(done: { scene: ParsedScene; x?: SceneExtraction }[], dayOf: (ordinal: number) => number | null): string {
+  if (done.length === 0) return "";
+  const characters = new Set<string>();
+  const lastCostume = new Map<string, string>();
+  const props = new Map<string, string>();
+  const learned: string[] = [];
+  for (const { scene, x } of done) {
+    scene.speakers.forEach((s) => characters.add(s));
+    if (!x) continue;
+    x.characters.forEach((c) => characters.add(c.name.toUpperCase()));
+    for (const c of x.costumes) lastCostume.set(c.character.toUpperCase(), `${c.garment}${c.state !== "normal" ? ` (${c.state})` : ""}`);
+    for (const p of x.props) props.set(p.name.toLowerCase(), `${p.action}${p.holder ? `, with ${p.holder}` : ""} (scene ${scene.number})`);
+    for (const k of x.knowledge) if (k.kind === "learns") learned.push(`${k.character} learned: ${k.fact} (scene ${scene.number})`);
+  }
+  const last = done[done.length - 1].scene;
+  const day = dayOf(last.ordinal);
+  return [
+    `Characters introduced: ${[...characters].join(", ")}`,
+    `Previous scene: ${last.number} ${last.heading} — story day ${day ?? "unknown"}`,
+    lastCostume.size ? `Last described costumes: ${[...lastCostume].map(([c, g]) => `${c}: ${g}`).join("; ")}` : null,
+    props.size ? `Props so far: ${[...props].map(([p, s]) => `${p} — ${s}`).join("; ")}` : null,
+    learned.length ? `Information learned so far:\n- ${learned.slice(-10).join("\n- ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Drop items whose source pointer cannot be verified against the scene text. */
+function verifyExtraction(scene: ParsedScene, x: SceneExtraction, onDrop: (what: string, reason: string) => void): SceneExtraction {
+  const keep = <T extends { source_line: number; source_snippet: string }>(items: T[], label: (t: T) => string): T[] =>
+    items.flatMap((item) => {
+      const v = verifySource(scene, item.source_line, item.source_snippet);
+      if (!v.ok) {
+        onDrop(label(item), v.reason);
+        return [];
+      }
+      return [{ ...item, source_line: v.line, source_snippet: v.snippet }];
+    });
+
+  const setting = verifySource(scene, x.setting.source_line, x.setting.source_snippet);
+  const day = verifySource(scene, x.story_day.source_line, x.story_day.source_snippet);
+  return {
+    characters: keep(x.characters, (c) => `character ${c.name}`),
+    setting: setting.ok ? { ...x.setting, source_line: setting.line, source_snippet: setting.snippet } : { ...x.setting, source_line: scene.startLine, source_snippet: scene.heading },
+    time_of_day_evidence: keep(x.time_of_day_evidence, (t) => `time cue ${t.implies}`),
+    story_day: day.ok
+      ? { ...x.story_day, source_line: day.line, source_snippet: day.snippet }
+      : { ...x.story_day, relation: x.story_day.relation === "explicit" ? "unknown" : x.story_day.relation, day: null, source_line: scene.startLine, source_snippet: scene.heading },
+    costumes: keep(x.costumes, (c) => `costume ${c.character}: ${c.garment}`),
+    props: keep(x.props, (p) => `prop ${p.name}`),
+    knowledge: keep(x.knowledge, (k) => `knowledge ${k.character}: ${k.fact}`),
+    relationships: keep(x.relationships, (r) => `relationship ${r.a}–${r.b}`),
+  };
+}
+
+class EntityStore {
+  private readonly ids = new Map<string, number>();
+  constructor(private readonly db: Db) {}
+
+  id(kind: EntityKind, canonical: string): number {
+    const key = `${kind}\u0000${canonical}`;
+    const known = this.ids.get(key);
+    if (known) return known;
+    const existing = this.db
+      .select({ id: entities.id })
+      .from(entities)
+      .where(and(eq(entities.kind, kind), eq(entities.canonicalName, canonical)))
+      .get();
+    const id = existing?.id ?? this.db.insert(entities).values({ kind, canonicalName: canonical }).returning({ id: entities.id }).get().id;
+    this.ids.set(key, id);
+    return id;
+  }
+
+  recordMerges(kind: EntityKind, merges: Merge[]): void {
+    for (const m of merges) {
+      const entityId = this.id(kind, m.canonical);
+      const row = this.db.select().from(entities).where(eq(entities.id, entityId)).get()!;
+      const aliases = new Set<string>(JSON.parse(row.aliasesJson));
+      if (aliases.has(m.alias)) continue;
+      aliases.add(m.alias);
+      this.db.update(entities).set({ aliasesJson: JSON.stringify([...aliases].sort()) }).where(eq(entities.id, entityId)).run();
+      this.db.insert(entityMerges).values({ entityId, alias: m.alias, rule: m.rule }).run();
+    }
+  }
+}
+
+export async function ingest(ctx: AgentContext, input: IngestInput): Promise<IngestReport> {
+  const { db, ledger } = ctx;
+  const script = upsertDocument(db, "script", input.script);
+  const costumeDoc = input.costumes ? upsertDocument(db, "costume_sheet", input.costumes) : undefined;
+  const locationDoc = input.locations ? upsertDocument(db, "location_sheet", input.locations) : undefined;
+
+  const parsed = parseFountain(input.script.text);
+  if (parsed.scenes.length === 0) ledger.issue("parse", "error", input.script.name, "no scene headings found");
+
+  let costumeRows: CostumeRow[] = [];
+  let locationRows: LocationRow[] = [];
+  try {
+    if (input.costumes) costumeRows = parseCostumeSheet(input.costumes.text);
+  } catch (err) {
+    ledger.issue("sheets", "error", input.costumes!.name, (err as Error).message);
+  }
+  try {
+    if (input.locations) locationRows = parseLocationSheet(input.locations.text);
+  } catch (err) {
+    ledger.issue("sheets", "error", input.locations!.name, (err as Error).message);
+  }
+
+  const sceneIds = new Map<number, number>();
+  for (const s of parsed.scenes) {
+    const row = db
+      .insert(scenes)
+      .values({
+        docId: script.id,
+        ordinal: s.ordinal,
+        number: s.number,
+        heading: s.heading,
+        intExt: s.intExt,
+        locationRaw: s.location,
+        timeOfDay: s.timeOfDay,
+        isFlashback: s.isFlashback,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        text: s.text,
+        textHash: hash(s.text),
+      })
+      .returning({ id: scenes.id })
+      .get();
+    sceneIds.set(s.ordinal, row.id);
+  }
+
+  // --- Model extraction, one scene at a time with a rolling summary ---------
+  const extractions = new Map<number, { x: SceneExtraction; model: string }>();
+  let extractedScenes = 0;
+  let cachedScenes = 0;
+  let skippedScenes = 0;
+  let droppedItems = 0;
+  const done: { scene: ParsedScene; x?: SceneExtraction }[] = [];
+  const evidence: DayEvidence[] = [];
+  const dayEvidence = (s: ParsedScene, x?: SceneExtraction): DayEvidence => ({
+    ordinal: s.ordinal,
+    isFlashback: s.isFlashback,
+    timeOfDay: s.timeOfDay,
+    parserDay: s.explicitDay?.day,
+    model: x ? { relation: x.story_day.relation, day: x.story_day.day } : undefined,
+  });
+
+  if (!ctx.gateway) {
+    ledger.issue("extract", "warning", input.script.name, "no model configured: only deterministic facts (cues, headings, explicit days, sheets) were extracted");
+  }
+  for (const scene of parsed.scenes) {
+    let x: SceneExtraction | undefined;
+    if (ctx.gateway) {
+      const days = resolveStoryDays(evidence);
+      const summary = buildSummary(done, (o) => days.find((d) => d.ordinal === o)?.day ?? null);
+      try {
+        const out = await runAgent(sceneExtractor, { scene, summary, title: parsed.titlePage.title }, ctx, `${input.script.name}#scene-${scene.number}`);
+        x = verifyExtraction(scene, out.extraction, (what, reason) => {
+          droppedItems++;
+          ledger.issue("verify", "warning", `scene ${scene.number}`, `dropped ${what}: ${reason}`);
+        });
+        extractions.set(scene.ordinal, { x, model: out.model });
+        extractedScenes++;
+        if (out.cacheHit) cachedScenes++;
+      } catch {
+        skippedScenes++;
+      }
+    }
+    done.push({ scene, x });
+    evidence.push(dayEvidence(scene, x));
+  }
+
+  // --- Entity resolution -----------------------------------------------------
+  const characterNames = new Set<string>();
+  const propNames = new Set<string>();
+  for (const s of parsed.scenes) s.speakers.forEach((n) => characterNames.add(n));
+  for (const { x } of extractions.values()) {
+    x.characters.forEach((c) => characterNames.add(c.name));
+    x.costumes.forEach((c) => characterNames.add(c.character));
+    x.knowledge.forEach((k) => characterNames.add(k.character));
+    x.relationships.forEach((r) => (characterNames.add(r.a), characterNames.add(r.b)));
+    x.props.forEach((p) => {
+      propNames.add(p.name);
+      if (p.holder) characterNames.add(p.holder);
+    });
+  }
+  costumeRows.forEach((r) => characterNames.add(r.character));
+
+  const chars = resolveCharacters(characterNames);
+  const props = resolveProps(propNames);
+  const locs = resolveLocations(parsed.scenes.map((s) => s.location), locationRows);
+  const store = new EntityStore(db);
+  store.recordMerges("character", chars.merges);
+  store.recordMerges("prop", props.merges);
+  store.recordMerges("location", locs.merges);
+  for (const a of [...chars.ambiguous, ...props.ambiguous]) {
+    ledger.issue("resolve", "info", a.name, `left unmerged: matches ${a.candidates.join(", ")}`);
+  }
+  const charId = (raw: string) => {
+    const n = normalizeCharacterName(raw);
+    return store.id("character", chars.map.get(n) ?? n);
+  };
+  const propId = (raw: string) => {
+    const n = normalizePropName(raw);
+    return store.id("prop", props.map.get(n) ?? n);
+  };
+  const locId = (raw: string) => {
+    const n = normalizeLocationName(raw);
+    return store.id("location", locs.map.get(n) ?? n);
+  };
+
+  const days = resolveStoryDays(evidence);
+  const dayOf = new Map(days.map((d) => [d.ordinal, d]));
+
+  // --- Facts ------------------------------------------------------------------
+  const rows: FactInsert[] = [];
+  const base = (sceneOrdinal: number | null, docId: number, extractedBy: string, confidence: number) => ({
+    sceneId: sceneOrdinal == null ? null : sceneIds.get(sceneOrdinal)!,
+    storyDay: sceneOrdinal == null ? null : (dayOf.get(sceneOrdinal)?.day ?? null),
+    sourceDocId: docId,
+    extractedBy,
+    confidence,
+  });
+
+  for (const s of parsed.scenes) {
+    const det = base(s.ordinal, script.id, "parser", 1);
+    const d = dayOf.get(s.ordinal)!;
+    const headingFact = { ...det, sourceLine: s.startLine, sourceSnippet: s.heading };
+    rows.push({ ...headingFact, kind: "located_at", subjectEntityId: locId(s.location), predicate: "scene_location", objectValue: s.number, attrsJson: JSON.stringify({ intExt: s.intExt }) });
+    rows.push({ ...headingFact, kind: "time_of_day", predicate: "heading_time", objectValue: s.timeOfDay });
+    rows.push({
+      ...det,
+      kind: "story_day",
+      predicate: "story_day",
+      objectValue: d.day == null ? "unknown" : String(d.day),
+      confidence: d.confidence,
+      sourceLine: s.explicitDay?.line ?? s.startLine,
+      sourceSnippet: s.explicitDay?.snippet ?? s.heading,
+      attrsJson: JSON.stringify({ basis: d.basis, flashback: s.isFlashback }),
+    });
+    const seenSpeakers = new Set<number>();
+    for (const el of s.elements) {
+      if (el.type !== "character" || !el.character) continue;
+      const id = charId(el.character);
+      if (seenSpeakers.has(id)) continue;
+      seenSpeakers.add(id);
+      rows.push({ ...det, kind: "appears_in", subjectEntityId: id, predicate: "speaks_in", objectValue: s.number, sourceLine: el.line, sourceSnippet: el.text, attrsJson: JSON.stringify({ speaking: true }) });
+    }
+
+    const ex = extractions.get(s.ordinal);
+    if (!ex) continue;
+    const { x, model } = ex;
+    const m = (conf = 0.9) => base(s.ordinal, script.id, model, conf);
+    for (const c of x.characters) {
+      const id = charId(c.name);
+      if (seenSpeakers.has(id)) continue;
+      seenSpeakers.add(id);
+      rows.push({ ...m(), kind: "appears_in", subjectEntityId: id, predicate: "present_in", objectValue: s.number, sourceLine: c.source_line, sourceSnippet: c.source_snippet, attrsJson: JSON.stringify({ speaking: c.speaking }) });
+    }
+    for (const t of x.time_of_day_evidence) {
+      rows.push({ ...m(0.8), kind: "time_of_day", predicate: "implied_time", objectValue: t.implies, sourceLine: t.source_line, sourceSnippet: t.source_snippet });
+    }
+    for (const c of x.costumes) {
+      rows.push({
+        ...m(),
+        kind: "wears",
+        subjectEntityId: charId(c.character),
+        predicate: "wears",
+        objectValue: c.garment,
+        sourceLine: c.source_line,
+        sourceSnippet: c.source_snippet,
+        attrsJson: JSON.stringify({ state: c.state, stateDetail: c.state_detail, changesInto: c.changes_into }),
+      });
+    }
+    for (const p of x.props) {
+      const attrs = JSON.stringify({ action: p.action, holder: p.holder ? chars.map.get(normalizeCharacterName(p.holder)) ?? normalizeCharacterName(p.holder) : null, fixedInPlace: p.fixed_in_place, state: p.state });
+      rows.push({ ...m(), kind: "prop_state", subjectEntityId: propId(p.name), predicate: p.action, objectValue: p.state ?? p.action, sourceLine: p.source_line, sourceSnippet: p.source_snippet, attrsJson: attrs });
+      if (p.holder) {
+        rows.push({ ...m(), kind: "has_prop", subjectEntityId: charId(p.holder), predicate: "holds", objectValue: props.map.get(normalizePropName(p.name)) ?? normalizePropName(p.name), sourceLine: p.source_line, sourceSnippet: p.source_snippet });
+      }
+    }
+    for (const k of x.knowledge) {
+      rows.push({ ...m(0.8), kind: k.kind === "learns" ? "learns_fact" : "references_fact", subjectEntityId: charId(k.character), predicate: k.kind, objectValue: k.fact, sourceLine: k.source_line, sourceSnippet: k.source_snippet });
+    }
+    for (const r of x.relationships) {
+      const b = normalizeCharacterName(r.b);
+      rows.push({ ...m(0.8), kind: "relationship", subjectEntityId: charId(r.a), predicate: r.relation, objectValue: chars.map.get(b) ?? b, sourceLine: r.source_line, sourceSnippet: r.source_snippet });
+    }
+  }
+
+  if (costumeDoc) {
+    for (const r of costumeRows) {
+      rows.push({
+        ...base(null, costumeDoc.id, "sheet", 1),
+        storyDay: r.storyDay,
+        kind: "wears",
+        subjectEntityId: charId(r.character),
+        predicate: "sheet_costume",
+        objectValue: r.costume,
+        sourceLine: r.line,
+        sourceSnippet: r.snippet,
+        attrsJson: JSON.stringify({ scenes: r.scenes, state: r.state }),
+      });
+    }
+  }
+  if (locationDoc) {
+    for (const r of locationRows) {
+      rows.push({
+        ...base(null, locationDoc.id, "sheet", 1),
+        kind: "located_at",
+        subjectEntityId: store.id("location", normalizeLocationName(r.name)),
+        predicate: "sheet_location",
+        objectValue: r.notes || r.name,
+        sourceLine: r.line,
+        sourceSnippet: r.snippet,
+        attrsJson: JSON.stringify({ intExt: r.intExt, aliases: r.aliases }),
+      });
+    }
+  }
+
+  db.transaction((tx) => {
+    for (let i = 0; i < rows.length; i += 200) tx.insert(facts).values(rows.slice(i, i + 200)).run();
+  });
+
+  return {
+    scriptDocId: script.id,
+    scriptVersion: script.version,
+    costumeDocId: costumeDoc?.id,
+    locationDocId: locationDoc?.id,
+    sceneCount: parsed.scenes.length,
+    factCount: rows.length,
+    extractedScenes,
+    cachedScenes,
+    skippedScenes,
+    droppedItems,
+  };
+}

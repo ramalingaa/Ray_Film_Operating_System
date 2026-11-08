@@ -34,3 +34,20 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
    character is the next scene in the script and its time of day is
    `CONTINUOUS`, `MOMENTS LATER`, `SECONDS LATER`, `SAME`, or `SAME TIME`.
    Other cases are left to `costume_state_carryover` and human review.
+9. **The extraction cache key leaves out the rolling summary.** It is
+   hash(scene text + prompt version + extract model list), as the spec says.
+   Editing scene 3 therefore does not re-extract scene 7, even though its
+   context summary changed. This matches the impact engine's "re-extract only
+   changed scenes" rule.
+10. **The rolling summary is built in code** from earlier extractions
+    (characters, last costume per character, props, learned facts, story day),
+    not by a model. It is cheaper and reproducible.
+11. **Model source pointers are verified, not trusted.** A snippet must occur
+    in the scene (ignoring case and punctuation). A wrong line number is
+    corrected to the real line. An unverifiable item is dropped and logged as a
+    `verify` pipeline issue.
+12. **`CONTINUOUS` / `MOMENTS LATER` / `LATER` headings pin a scene to the
+    previous scene's story day** with confidence 1, whatever the model says.
+13. **Ingest runs without models** (`--no-models`, or when no credentials are
+    configured). Cues, headings, explicit days and sheet rows still become
+    facts, and a warning issue records that model extraction did not run.
