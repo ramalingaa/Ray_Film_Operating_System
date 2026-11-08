@@ -20,7 +20,8 @@ export type Env = Record<string, string | undefined>;
 interface ProviderDef {
   baseURL?: string;
   baseURLEnv?: string;
-  keyEnv?: string;
+  /** Env vars that may hold the key, first match wins. */
+  keyEnv?: string | string[];
   /** Local servers accept any key. */
   localKey?: string;
   jsonMode: JsonMode;
@@ -30,7 +31,7 @@ interface ProviderDef {
 export const OPENAI_COMPATIBLE_PROVIDERS: Record<string, ProviderDef> = {
   openai: { keyEnv: "OPENAI_API_KEY", jsonMode: "json_schema" },
   gemini: { baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", keyEnv: "GEMINI_API_KEY", jsonMode: "json_schema" },
-  openrouter: { baseURL: "https://openrouter.ai/api/v1", keyEnv: "OPENROUTER_API_KEY", jsonMode: "json_schema" },
+  openrouter: { baseURL: "https://openrouter.ai/api/v1", keyEnv: ["OPENROUTER_API_KEY", "OPEN_ROUTER_LLM_KEY"], jsonMode: "json_schema" },
   groq: { baseURL: "https://api.groq.com/openai/v1", keyEnv: "GROQ_API_KEY", jsonMode: "json_schema" },
   together: { baseURL: "https://api.together.xyz/v1", keyEnv: "TOGETHER_API_KEY", jsonMode: "json_schema" },
   fireworks: { baseURL: "https://api.fireworks.ai/inference/v1", keyEnv: "FIREWORKS_API_KEY", jsonMode: "json_schema" },
@@ -65,14 +66,16 @@ export function createAdapter(spec: string, env: Env = process.env): ModelAdapte
     const known = ["anthropic", ...Object.keys(OPENAI_COMPATIBLE_PROVIDERS)].join(", ");
     throw new ModelConfigError(`unknown provider "${provider}" (known: ${known})`);
   }
-  const apiKey = def.keyEnv ? env[def.keyEnv] : def.localKey;
-  if (!apiKey) throw new ModelConfigError(`${provider}: set ${def.keyEnv}`);
+  const keyEnvs = def.keyEnv === undefined ? [] : [def.keyEnv].flat();
+  const apiKey = keyEnvs.length ? keyEnvs.map((k) => env[k]?.trim()).find(Boolean) : def.localKey;
+  if (!apiKey) throw new ModelConfigError(`${provider}: set ${keyEnvs.join(" or ")}`);
   return new OpenAICompatibleAdapter({
     provider,
     model,
     apiKey,
     baseURL: (def.baseURLEnv && env[def.baseURLEnv]) || def.baseURL,
     jsonMode: def.jsonMode,
+    headers: provider === "openrouter" ? { "HTTP-Referer": "https://github.com/reelgraph", "X-Title": "ReelGraph" } : undefined,
   });
 }
 

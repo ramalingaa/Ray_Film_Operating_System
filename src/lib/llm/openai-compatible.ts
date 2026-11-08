@@ -11,6 +11,8 @@ export interface OpenAICompatibleOptions {
   apiKey: string;
   /** json_schema where the server supports constrained decoding; json_object otherwise. */
   jsonMode: JsonMode;
+  /** Extra request headers (OpenRouter app attribution). */
+  headers?: Record<string, string>;
 }
 
 /** Strip a ```json fence if a model wrapped its answer in one. */
@@ -45,7 +47,7 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
 
   constructor(private readonly opts: OpenAICompatibleOptions) {
     this.spec = `${opts.provider}:${opts.model}`;
-    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL, defaultHeaders: opts.headers });
   }
 
   async generate<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {

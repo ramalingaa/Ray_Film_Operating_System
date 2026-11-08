@@ -111,3 +111,21 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     for scenes whose text changed.
 30. **An edit always creates a new document version**, even if it restores an
     earlier text. Every version is kept, and any two can be compared.
+31. **OpenRouter reads `OPENROUTER_API_KEY` or `OPEN_ROUTER_LLM_KEY`**, first
+    non-empty wins. OpenRouter is reached through the existing OpenAI-compatible
+    adapter (its API is OpenAI-compatible), not `@openrouter/sdk`, so every
+    model call keeps going through one gateway with the same retry, fallback,
+    validation, caching and `agent_runs` logging. Requests carry OpenRouter's
+    app-attribution headers. Extraction asks for at most 8,000 output tokens,
+    because OpenRouter reserves credit for `max_tokens` up front.
+32. **No CrewAI.** CrewAI is a Python framework and this codebase is
+    TypeScript. Bringing it in would mean a second runtime and a second place
+    where model calls happen, outside the ledger and cache. The in-house agent
+    runtime (`src/lib/agents/runtime.ts`) already plays that role: each agent
+    has a name, a version, typed input/output, and a logged run, and all model
+    traffic goes through `ModelGateway`. Revisit if a Python service is added.
+33. **Default OpenRouter routing in `.env` is free-first** because the
+    account has no purchased credit:
+    `nvidia/nemotron-3.5-super-vl:free` (50 free requests/day), then
+    `deepseek/deepseek-v4.1-flash`, then `tencent/hy4` as paid fallbacks.
+    With credit, put a stronger judge first and use `JUDGE_POLICY=majority`.

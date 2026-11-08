@@ -31,6 +31,13 @@ describe("model specs", () => {
     expect(() => createAdapter("openai:gpt-5", {})).toThrow(/OPENAI_API_KEY/);
     expect(createAdapter("ollama:llama4", {}).spec).toBe("ollama:llama4");
   });
+  it("accepts OPEN_ROUTER_LLM_KEY as the OpenRouter key, keeping ':free' in model ids", () => {
+    expect(() => createAdapter("openrouter:tencent/hy4", {})).toThrow(/OPENROUTER_API_KEY or OPEN_ROUTER_LLM_KEY/);
+    expect(() => createAdapter("openrouter:tencent/hy4", { OPEN_ROUTER_LLM_KEY: "  " })).toThrow(ModelConfigError);
+    expect(createAdapter("openrouter:nvidia/nemotron-3.5-super-vl:free", { OPEN_ROUTER_LLM_KEY: "test-key" }).spec).toBe(
+      "openrouter:nvidia/nemotron-3.5-super-vl:free",
+    );
+  });
   it("reads role lists from env with an anthropic default", () => {
     expect(rolesFromEnv({ MODEL_JUDGE: "openai:gpt-5, gemini:gemini-3-pro" })).toEqual({
       extract: ["anthropic:claude-sonnet-5"],

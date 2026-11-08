@@ -57,6 +57,16 @@ MODEL_JUDGE=anthropic:claude-sonnet-5,openai:gpt-5,openrouter:qwen/qwen3-235b-a2
 JUDGE_POLICY=unanimous
 ```
 
+To run everything through OpenRouter, put the key in `.env` (git-ignored) as
+`OPEN_ROUTER_LLM_KEY` or `OPENROUTER_API_KEY`:
+
+```
+OPEN_ROUTER_LLM_KEY=sk-or-...
+MODEL_EXTRACT=openrouter:nvidia/nemotron-3.5-super-vl:free,openrouter:deepseek/deepseek-v4.1-flash
+MODEL_JUDGE=openrouter:anthropic/claude-sonnet-5.5,openrouter:tencent/hy4,openrouter:google/gemini-3.8-flash
+JUDGE_POLICY=majority
+```
+
 Providers: `anthropic`, `openai`, `gemini`, `openrouter`, `groq`, `together`,
 `deepseek`, `mistral`, `fireworks`, `xai`, and local `ollama`, `lmstudio`,
 `vllm`. Extra models in a list are fallbacks for extraction, and co-judges for
