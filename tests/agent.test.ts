@@ -244,4 +244,11 @@ describe("the background queue", () => {
     expect(cronAuthorized(null, { NODE_ENV: "production" })).toMatchObject({ ok: false, status: 500 });
     expect(cronAuthorized(null, { NODE_ENV: "development" })).toEqual({ ok: true });
   });
+
+  it("sleeps until it is switched on", async () => {
+    const { workerEnabled } = await import("@/lib/agent/queue");
+    expect(workerEnabled({})).toBe(false);
+    expect(workerEnabled({ AGENT_WORKER_ENABLED: "0" })).toBe(false);
+    expect(workerEnabled({ AGENT_WORKER_ENABLED: "1" })).toBe(true);
+  });
 });

@@ -74,3 +74,8 @@ export function cronAuthorized(authHeader: string | null, env: Record<string, st
   }
   return authHeader === `Bearer ${secret}` ? { ok: true } : { ok: false, status: 401, error: "Unauthorized." };
 }
+
+/** The background worker sleeps until AGENT_WORKER_ENABLED is set to 1 (or true). */
+export function workerEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return /^(1|true|yes|on)$/i.test(env.AGENT_WORKER_ENABLED?.trim() ?? "");
+}

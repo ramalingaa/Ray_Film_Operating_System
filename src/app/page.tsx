@@ -39,7 +39,7 @@ const STEPS = [
   {
     n: "02",
     title: "The AI drafts and tests",
-    body: "It works through each chapter, from story to budget, showing every step it takes and every finding with the line it came from. It keeps going in the background.",
+    body: "It works through each chapter, from story to budget, showing every step it takes and every finding with the line it came from.",
   },
   {
     n: "03",

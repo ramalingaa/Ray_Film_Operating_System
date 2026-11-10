@@ -345,4 +345,9 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 87. **The landing page is at `/` and the workspace at `/projects`.** The
     landing page is static (no database) and pitches people and the AI
     working together; `/new` redirects to the workspace.
-
+88. **The background worker is asleep until the owner activates it.** The
+    Vercel project is on Hobby, which rejects crons that run more than once a
+    day, so `vercel.json` has no schedule and the route does nothing unless
+    `AGENT_WORKER_ENABLED=1`. Until then agents run while their project page
+    is open. Activating means setting the variable plus `CRON_SECRET` and
+    adding a schedule (README, "Deploying on Vercel").

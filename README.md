@@ -57,15 +57,22 @@ Set these environment variables in the Vercel project:
 |---|---|
 | `DATABASE_URL` | Supabase **transaction pooler** string (port 6543), with the password URL-encoded (`@` → `%40`) |
 | `OPEN_ROUTER_LLM_KEY` | your OpenRouter key |
-| `CRON_SECRET` | any long random string; required for the background agent worker (Vercel Cron sends it) |
+| `CRON_SECRET`, `AGENT_WORKER_ENABLED` | only when you activate the background agent worker (see below) |
 | `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY`, `MODEL_AGENT` | optional; without them an OpenRouter key routes every role to the free-first default (set `MODEL_AGENT` to a model that supports tool calling) |
 
 Run `npm run db:migrate` once from your machine (with the same `DATABASE_URL`)
 before the first deploy and after any schema change. Functions run in `sin1`
-to sit next to the database. `vercel.json` schedules the background agent
-worker (`/api/cron/agent`) every minute; per-minute crons need a Vercel Pro
-plan (on Hobby they run once a day, and agents only move while their page is
-open). Then open **Load script** in the app to upload a
+to sit next to the database.
+
+The background agent worker (`/api/cron/agent`) is **asleep**: agents work
+while their project page is open. To activate it, set
+`AGENT_WORKER_ENABLED=1` and `CRON_SECRET`, then schedule calls to the route,
+for example by adding to `vercel.json` (per-minute crons need Vercel Pro;
+Hobby rejects deployments with crons that run more than once a day):
+
+```json
+"crons": [{ "path": "/api/cron/agent", "schedule": "* * * * *" }]
+``` Then open **Load script** in the app to upload a
 screenplay, or load the bundled sample.
 
 ## The app
@@ -78,8 +85,9 @@ screenplay, or load the bundled sample.
   tests, reads each report, fixes what it can, approves the chapter, and moves
   on until the production is greenlit. The project page shows the agent's
   live timeline (every tool call and its result) beside the reports it has
-  produced. Message the agent at any time, or stop and resume it. The agent
-  keeps working in the background after you close the page.
+  produced. Message the agent at any time, or stop and resume it. Once the
+  background worker is activated, the agent keeps working after you close
+  the page.
 - **Chapter-by-chapter view** (`/runs/[id]`): approve, reopen and revise
   chapters by hand.
 - **Review**: the script with line numbers next to the findings, grouped by

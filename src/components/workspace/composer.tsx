@@ -59,7 +59,7 @@ export function Composer({ runId, status }: { runId: number; status: AgentStatus
         </button>
       </form>
       <div className="flex items-center justify-between gap-3 px-2 text-xs text-muted">
-        <span>The agent drafts and approves each chapter in the background. Step in, revise or reopen anything at any time.</span>
+        <span>The agent drafts and approves each chapter for you. Step in, revise or reopen anything at any time.</span>
         {status === "running" ? (
           <form action={stopAgentAction}>
             <input type="hidden" name="id" value={runId} />
