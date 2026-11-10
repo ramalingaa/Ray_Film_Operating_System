@@ -56,7 +56,7 @@ Set these environment variables in the Vercel project:
 |---|---|
 | `DATABASE_URL` | Supabase **transaction pooler** string (port 6543), with the password URL-encoded (`@` → `%40`) |
 | `OPEN_ROUTER_LLM_KEY` | your OpenRouter key |
-| `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY` | optional; without them an OpenRouter key routes both roles to the free-first default |
+| `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY`, `MODEL_AGENT` | optional; without them an OpenRouter key routes every role to the free-first default (set `MODEL_AGENT` to a model that supports tool calling) |
 
 Run `npm run db:migrate` once from your machine (with the same `DATABASE_URL`)
 before the first deploy and after any schema change. Functions run in `sin1`
@@ -65,9 +65,16 @@ screenplay, or load the bundled sample.
 
 ## The app
 
-- **Analyze** (home): upload or paste a screenplay or story, with optional
-  costume and location sheets, or run the sample. Opens the run page, which
-  steps through the stages and shows each report as it finishes.
+- **Workspace** (home): your projects on the left. Start a new one from a
+  story or a screenplay (with optional costume and location sheets, and notes
+  for the agent), or open a sample. Each project is handed to its own
+  **agent**, which works through every chapter on autopilot: it runs the
+  tests, reads each report, fixes what it can, approves the chapter, and moves
+  on until the production is greenlit. The project page shows the agent's
+  live timeline (every tool call and its result) beside the reports it has
+  produced. Message the agent at any time, or stop and resume it.
+- **Chapter-by-chapter view** (`/runs/[id]`): approve, reopen and revise
+  chapters by hand.
 - **Review**: the script with line numbers next to the findings, grouped by
   severity. Click a finding to see the conflict in plain language and the exact
   lines it comes from. Dismiss it as intentional (with a reason) or flag it for
@@ -86,7 +93,12 @@ Every step names its models in `.env` as `provider:model`:
 MODEL_EXTRACT=anthropic:claude-sonnet-5
 MODEL_JUDGE=anthropic:claude-sonnet-5,openai:gpt-5,openrouter:qwen/qwen3-235b-a22b
 JUDGE_POLICY=unanimous
+MODEL_AGENT=anthropic:claude-sonnet-5
 ```
+
+`MODEL_AGENT` runs the project agent and must support tool calling. Without
+it (and without any model key), a scripted agent takes the same steps in the
+standard order.
 
 To run everything through OpenRouter, put the key in `.env` (git-ignored) as
 `OPEN_ROUTER_LLM_KEY` or `OPENROUTER_API_KEY`:

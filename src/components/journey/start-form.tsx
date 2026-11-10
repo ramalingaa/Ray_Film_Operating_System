@@ -135,11 +135,21 @@ export function StartForm({ initial, samples }: { initial: Mode; samples: { stor
             </>
           )}
 
+          <details className="text-[15px] text-fg-2">
+            <summary className="cursor-pointer py-2 font-semibold text-fg">Notes for the agent (optional)</summary>
+            <textarea
+              name="goal"
+              rows={3}
+              placeholder="e.g. Keep it to one location if you can. Stop after the breakdown so I can review it."
+              className="field mt-2 text-[15px]"
+            />
+          </details>
+
           <div className="mt-2 flex flex-wrap items-center gap-4">
             <button className="btn-dark min-h-14! px-7! text-base!" disabled={busy}>
-              {busy ? "Starting…" : isStory ? "Test my story" : "Check my screenplay"} <ArrowRight aria-hidden size={18} />
+              {busy ? "Starting…" : "Hand it to the agent"} <ArrowRight aria-hidden size={18} />
             </button>
-            <span className="text-sm text-muted">{isStory ? "Takes about a minute." : "A 10-scene script takes two to three minutes."}</span>
+            <span className="text-sm text-muted">The agent starts right away; you can follow every step.</span>
           </div>
         </form>
 

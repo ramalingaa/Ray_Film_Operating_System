@@ -185,6 +185,9 @@ export const pipelineIssues = pgTable("pipeline_issues", {
   createdAt: createdAt(),
 });
 
+export const AGENT_STATUSES = ["idle", "running", "waiting", "done", "stopped", "failed"] as const;
+export type AgentStatus = (typeof AGENT_STATUSES)[number];
+
 export const RUN_STAGES = ["story_test", "intake", "story", "continuity", "breakdown", "locations", "schedule", "budget"] as const;
 export type RunStage = (typeof RUN_STAGES)[number];
 
@@ -215,6 +218,10 @@ export const runs = pgTable("runs", {
   locationsText: text("locations_text"),
   status: text("status", { enum: ["queued", "running", "done", "failed"] }).notNull().default("queued"),
   lockedUntil: doublePrecision("locked_until"),
+  /** The project agent: idle (never started), running, waiting (on the user), done, stopped (by the user), failed. */
+  agentStatus: text("agent_status", { enum: AGENT_STATUSES }).notNull().default("idle"),
+  /** Lease (epoch ms) so only one agent turn works on a project at a time. Separate from the stage lease. */
+  agentLockedUntil: doublePrecision("agent_locked_until"),
   createdAt: createdAt(),
   updatedAt: text("updated_at"),
 });
@@ -237,4 +244,35 @@ export const runStages = pgTable(
     finishedAt: text("finished_at"),
   },
   (t) => [uniqueIndex("run_stages_run_stage").on(t.runId, t.stage)],
+);
+
+export const AGENT_EVENT_KINDS = ["user", "assistant", "tool", "error", "status"] as const;
+export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
+
+/**
+ * The project agent's transcript, one row per thing that happened: a user
+ * message, what the agent said and which tools it called (assistant), each
+ * tool's result (tool), errors, and status changes. The model's conversation
+ * is rebuilt from these rows on every turn, so a turn can stop at any point
+ * and the next one picks up where it left off.
+ */
+export const agentEvents = pgTable(
+  "agent_events",
+  {
+    id: serial("id").primaryKey(),
+    runId: integer("run_id")
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: AGENT_EVENT_KINDS }).notNull(),
+    /** Tool name (kind "tool"). */
+    tool: text("tool"),
+    /** Tool call id (kind "tool"), matching one of the calls in an assistant row. */
+    callId: text("call_id"),
+    /** Text for people: the message, or a one-line summary of a tool result. */
+    content: text("content").notNull().default(""),
+    /** Structured detail: assistant tool calls, tool input and model-facing output. */
+    dataJson: text("data_json"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("agent_events_run").on(t.runId, t.id)],
 );

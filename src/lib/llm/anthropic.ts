@@ -1,9 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { ModelOutputError, ModelRefusalError, type ModelAdapter, type StructuredRequest, type StructuredResult } from "./types";
+import {
+  ModelOutputError,
+  ModelRefusalError,
+  type ChatAdapter,
+  type ChatMessage,
+  type ChatRequest,
+  type ChatResult,
+  type ModelAdapter,
+  type StructuredRequest,
+  type StructuredResult,
+} from "./types";
 
 /** Claude models through the official SDK, using structured outputs for schema-valid JSON. */
-export class AnthropicAdapter implements ModelAdapter {
+export class AnthropicAdapter implements ModelAdapter, ChatAdapter {
   readonly spec: string;
   private readonly client: Anthropic;
 
@@ -40,4 +50,55 @@ export class AnthropicAdapter implements ModelAdapter {
       usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
     };
   }
+
+  /** A tool-calling turn: Claude's native tool use. */
+  async chat(req: ChatRequest): Promise<ChatResult> {
+    const res = await this.client.messages.create({
+      model: this.model,
+      max_tokens: req.maxTokens ?? 8000,
+      system: req.system,
+      tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters as Anthropic.Tool.InputSchema })),
+      messages: toAnthropicMessages(req.messages),
+    });
+    if (res.stop_reason === "refusal") throw new ModelRefusalError(`${this.spec} declined to continue`);
+    let text = "";
+    const toolCalls: ChatResult["toolCalls"] = [];
+    for (const b of res.content) {
+      if (b.type === "text") text += b.text;
+      else if (b.type === "tool_use") toolCalls.push({ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> });
+    }
+    return {
+      text,
+      toolCalls,
+      stop: toolCalls.length ? "tool_use" : res.stop_reason === "max_tokens" ? "max_tokens" : "end",
+      model: this.spec,
+      usage: { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens },
+    };
+  }
+}
+
+/**
+ * Anthropic wants alternating user/assistant turns, with tool results as
+ * tool_result blocks inside a user turn. Consecutive same-role turns merge.
+ */
+export function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
+  const out: { role: "user" | "assistant"; content: Anthropic.ContentBlockParam[] }[] = [];
+  const push = (role: "user" | "assistant", blocks: Anthropic.ContentBlockParam[]) => {
+    if (!blocks.length) return;
+    const last = out[out.length - 1];
+    if (last && last.role === role) last.content.push(...blocks);
+    else out.push({ role, content: blocks });
+  };
+  for (const m of messages) {
+    if (m.role === "user") push("user", [{ type: "text", text: m.content || "(empty)" }]);
+    else if (m.role === "tool") push("user", [{ type: "tool_result", tool_use_id: m.toolCallId, content: m.content || "(no output)" }]);
+    else {
+      const blocks: Anthropic.ContentBlockParam[] = [];
+      if (m.content.trim()) blocks.push({ type: "text", text: m.content });
+      for (const c of m.toolCalls ?? []) blocks.push({ type: "tool_use", id: c.id, name: c.name, input: c.input });
+      push("assistant", blocks.length ? blocks : [{ type: "text", text: "(continuing)" }]);
+    }
+  }
+  if (out[0]?.role !== "user") out.unshift({ role: "user", content: [{ type: "text", text: "Begin." }] });
+  return out;
 }

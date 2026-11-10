@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import { ModelOutputError, type ModelAdapter, type StructuredRequest, type StructuredResult } from "./types";
+import { ModelOutputError, type ChatAdapter, type ChatMessage, type ChatRequest, type ChatResult, type ModelAdapter, type StructuredRequest, type StructuredResult } from "./types";
 
 export type JsonMode = "json_schema" | "json_object";
 
@@ -47,7 +47,7 @@ export function parseStructured<T>(text: string, schema: z.ZodType<T>, spec: str
  * OpenRouter, Groq, Together, Fireworks, DeepSeek, Mistral, xAI, and local
  * Ollama / LM Studio / vLLM.
  */
-export class OpenAICompatibleAdapter implements ModelAdapter {
+export class OpenAICompatibleAdapter implements ModelAdapter, ChatAdapter {
   readonly spec: string;
   private readonly client: OpenAI;
 
@@ -103,4 +103,63 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
       usage: { inputTokens: res.usage?.prompt_tokens, outputTokens: res.usage?.completion_tokens },
     };
   }
+
+  /** A tool-calling turn through the chat-completions `tools` field. */
+  async chat(req: ChatRequest): Promise<ChatResult> {
+    const body = {
+      model: this.opts.model,
+      messages: toOpenAIMessages(req.system, req.messages),
+      tools: req.tools.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.parameters } })),
+      max_tokens: req.maxTokens ?? 8000,
+    };
+    const extra = this.opts.extraBody ?? {};
+    let res;
+    try {
+      res = await this.client.chat.completions.create({ ...body, ...extra } as typeof body);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const keys = Object.keys(extra);
+      if (!keys.length || !/400/.test(msg) || !keys.some((k) => msg.toLowerCase().includes(k))) throw err;
+      res = await this.client.chat.completions.create(body);
+    }
+    const choice = res.choices[0];
+    const toolCalls: ChatResult["toolCalls"] = [];
+    for (const c of choice?.message?.tool_calls ?? []) {
+      if (c.type !== "function") continue;
+      toolCalls.push({ id: c.id, name: c.function.name, input: parseArguments(c.function.arguments) });
+    }
+    return {
+      text: choice?.message?.content ?? "",
+      toolCalls,
+      stop: toolCalls.length ? "tool_use" : choice?.finish_reason === "length" ? "max_tokens" : "end",
+      model: this.spec,
+      usage: { inputTokens: res.usage?.prompt_tokens, outputTokens: res.usage?.completion_tokens },
+    };
+  }
+}
+
+/** Tool arguments arrive as a JSON string; a malformed one becomes `{ _invalid: raw }` so the tool can report it. */
+export function parseArguments(raw: string | undefined): Record<string, unknown> {
+  if (!raw?.trim()) return {};
+  try {
+    const v = JSON.parse(extractJson(raw));
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : { _invalid: raw };
+  } catch {
+    return { _invalid: raw };
+  }
+}
+
+export function toOpenAIMessages(system: string, messages: ChatMessage[]): OpenAI.ChatCompletionMessageParam[] {
+  const out: OpenAI.ChatCompletionMessageParam[] = [{ role: "system", content: system }];
+  for (const m of messages) {
+    if (m.role === "user") out.push({ role: "user", content: m.content });
+    else if (m.role === "tool") out.push({ role: "tool", tool_call_id: m.toolCallId, content: m.content || "(no output)" });
+    else
+      out.push({
+        role: "assistant",
+        content: m.content || null,
+        ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: "function" as const, function: { name: c.name, arguments: JSON.stringify(c.input) } })) } : {}),
+      });
+  }
+  return out;
 }

@@ -289,3 +289,40 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 75. **Charts use the validated categorical palette** (not the stage colours,
     which fail colour-blind separation as a series palette), carry legends and
     hover titles, and pair every relationship line with a numbered text list.
+76. **Every project is driven by an agent** (product decision, chosen by the
+    owner). The agent is a free-running tool loop: the model decides the next
+    tool, and the pipeline's stages and chapter gates are its tools
+    (`src/lib/agent/tools.ts`). Stages still do the work deterministically
+    and keep every citation; the agent reads their reports and decides.
+77. **Autopilot.** The agent approves chapters itself when their tests have
+    run, naming open high-severity notes in its approval. The user can message
+    it, stop it or resume it at any time, and can still approve or reopen
+    chapters by hand in the chapter-by-chapter view (`/runs/[id]`).
+78. **One agent model role, any provider.** `MODEL_AGENT` lists tool-calling
+    models (`provider:model`, first that answers wins, the rest are
+    fallbacks). Unset, it defaults the same way as the other roles. Tool
+    calling uses Anthropic's native tool use, and the chat-completions `tools`
+    field for every OpenAI-compatible provider (OpenRouter included).
+79. **No agent model → scripted agent.** Without a usable `MODEL_AGENT`, a
+    scripted policy (`scriptedDecision`) makes the same tool calls in the
+    standard order: run the chapter, read its last report, approve; write the
+    screenplay from the story when asked; retry a failed stage once, then ask
+    the user. It says plainly that it cannot read messages.
+80. **The transcript is the state.** Every message, tool call and tool result
+    is a row in `agent_events`; each turn rebuilds the model conversation from
+    them (`toChatMessages`). A call whose result was lost gets a stand-in
+    "interrupted" result, a user message sent mid-call is placed after the
+    results, and older tool results are trimmed to keep the context small.
+81. **Agent turns are time-boxed like stage steps** (200 s, under the 300 s
+    function limit) and hold their own lease (`runs.agent_locked_until`),
+    separate from the stage lease, because the agent's tools take the stage
+    lease themselves. The workspace page calls the next turn while it is
+    open; closing it pauses the agent between turns.
+82. **The agent may revise the user's story at most twice per project**, only
+    to fix gaps the story report names, keeping the author's events,
+    characters and voice. Beyond that it asks the user.
+83. **Agent tool calls are not cached** (they depend on the live project
+    state), so the agent's prompt lives in `src/lib/agent/prompt.ts` and has
+    no `PROMPT_VERSION`. Each model call is still logged in `agent_runs`
+    (`project-agent@1`), and every failed tool call in `pipeline_issues`.
+

@@ -42,7 +42,9 @@ describe("model specs", () => {
     expect(rolesFromEnv({ MODEL_JUDGE: "openai:gpt-5, gemini:gemini-3-pro" })).toEqual({
       extract: ["anthropic:claude-sonnet-5"],
       judge: ["openai:gpt-5", "gemini:gemini-3-pro"],
+      agent: ["anthropic:claude-sonnet-5"],
     });
+    expect(rolesFromEnv({ MODEL_AGENT: "openrouter:a/b" }).agent).toEqual(["openrouter:a/b"]);
   });
 });
 

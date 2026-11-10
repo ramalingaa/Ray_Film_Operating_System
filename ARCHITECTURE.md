@@ -38,7 +38,9 @@ depends on: generated material is only as useful as our ability to check it.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ UI (Next.js App Router)   script pane · findings · impact · eval      │
+│ UI (Next.js App Router)   agent workspace · findings · impact · eval  │
+├──────────────────────────────────────────────────────────────────────┤
+│ Project agent             tool loop over stages and gates, transcript │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Orchestrator              stage DAG, incremental re-runs, run ledger  │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -59,6 +61,7 @@ depends on: generated material is only as useful as our ability to check it.
 | Story graph | `src/lib/db/` (Drizzle schema + checked-in migrations) |
 | Model gateway | `src/lib/llm/` |
 | Agent runtime | `src/lib/agents/` |
+| Project agent | `src/lib/agent/` (loop, tools, transcript, prompt) |
 | Parsing | `src/lib/fountain.ts`, `src/lib/sheets.ts` |
 | Extraction agent | `src/lib/extract/` |
 | Continuity checks | `src/lib/checks/` (one file per check + registry) |
@@ -115,10 +118,36 @@ An agent is a named, versioned unit with a typed input, a typed output, and a
 declared set of tools. The orchestrator gives it an `AgentContext` (database,
 model gateway, ledger). Every run is written to `agent_runs`.
 
-We use bounded agents: code decides the control flow, and the model makes
-the judgments inside each step. Free-running tool loops, where the model picks
-its next tool, are reserved for the generative writers' room stages (section
-6), and even those write only through validated graph tools.
+Inside a stage we use bounded agents: code decides the control flow, and the
+model makes the judgments inside each step.
+
+### The project agent
+
+Above the stages, each project has one **project agent** (`src/lib/agent/`), a
+free-running tool loop that takes the project from the first chapter to the
+greenlight on autopilot. The stages and chapter gates are its tools:
+
+| Tool | Wraps |
+|---|---|
+| `get_status`, `read_report`, `read_document` | `loadRun`, stage reports, the story or script with line numbers |
+| `run_current_chapter` | `stepRun` (time-boxed; call again while "working") |
+| `write_screenplay_from_story`, `revise_story` | `writeScriptFromStory`, `updateStory` (at most two revisions) |
+| `retry_failed_stage`, `approve_chapter`, `reopen_chapter` | `retryRun`, `approveChapter`, `reopenChapter` |
+| `ask_user`, `finish` | hand the turn to the user; end the job |
+
+Every message, tool call and result is a row in `agent_events`. A turn
+(`agentTurn`) leases the project, rebuilds the conversation from those rows,
+and alternates model calls (`ModelGateway.chat`, role `agent`) and tool calls
+until the agent asks the user, finishes, is stopped, or its time budget runs
+out; the workspace page then starts the next turn. Tools never throw: errors
+go back to the model as `{ error }` and into `pipeline_issues`. Without a
+tool-calling model, a scripted policy makes the same calls in the standard
+order.
+
+The UI is a workspace (`/` and `/projects/[id]`): projects on the left, the
+agent's live timeline and a message box in the middle, and the reports it has
+produced on the right. The chapter-by-chapter view (`/runs/[id]`) stays for
+manual control.
 
 ## 6. The full pipeline (target)
 

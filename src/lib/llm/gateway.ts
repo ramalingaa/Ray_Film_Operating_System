@@ -6,15 +6,18 @@
 import { AnthropicAdapter } from "./anthropic";
 import { OpenAICompatibleAdapter, type JsonMode } from "./openai-compatible";
 import {
+  canChat,
   ModelConfigError,
   ModelOutputError,
   ModelRefusalError,
+  type ChatRequest,
+  type ChatResult,
   type ModelAdapter,
   type StructuredRequest,
   type StructuredResult,
 } from "./types";
 
-export type Role = "extract" | "judge";
+export type Role = "extract" | "judge" | "agent";
 export type Env = Record<string, string | undefined>;
 
 interface ProviderDef {
@@ -96,7 +99,7 @@ export function openRouterReasoning(env: Env): Record<string, unknown> {
 export const DEFAULT_OPENROUTER_MODELS = "openrouter:nvidia/nemotron-3.5-super-vl:free,openrouter:deepseek/deepseek-v4.1-flash,openrouter:tencent/hy4";
 
 /**
- * Read role → model lists from env (MODEL_EXTRACT, MODEL_JUDGE). Unset roles
+ * Read role → model lists from env (MODEL_EXTRACT, MODEL_JUDGE, MODEL_AGENT). Unset roles
  * default to Anthropic when its key is set, else to OpenRouter when its key is
  * set, else to Anthropic (which then reports the missing key).
  */
@@ -109,7 +112,7 @@ export function rolesFromEnv(env: Env = process.env): Record<Role, string[]> {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-  return { extract: list(env.MODEL_EXTRACT), judge: list(env.MODEL_JUDGE) };
+  return { extract: list(env.MODEL_EXTRACT), judge: list(env.MODEL_JUDGE), agent: list(env.MODEL_AGENT) };
 }
 
 export interface AttemptLog {
@@ -157,7 +160,8 @@ export class ModelGateway {
   private readonly adapters = new Map<string, ModelAdapter>();
 
   constructor(
-    private readonly roles: Record<Role, string[]>,
+    /** Role → ordered model specs. A role left out has no models. */
+    private readonly roles: Partial<Record<Role, string[]>>,
     private readonly factory: AdapterFactory = (s) => createAdapter(s),
     /** Waits before each retry of a transient provider error. */
     private readonly retryDelaysMs: number[] = [3000, 8000],
@@ -168,7 +172,7 @@ export class ModelGateway {
   }
 
   specs(role: Role): string[] {
-    return this.roles[role];
+    return this.roles[role] ?? [];
   }
 
   adapter(spec: string): ModelAdapter {
@@ -206,9 +210,35 @@ export class ModelGateway {
   /** Try each model for the role in order until one returns a valid answer. */
   async generate<T>(role: Role, req: StructuredRequest<T>): Promise<StructuredResult<T> & { attempts: AttemptLog[] }> {
     const attempts: AttemptLog[] = [];
-    for (const spec of this.roles[role]) {
+    for (const spec of this.specs(role)) {
       try {
         const r = await this.generateWith(spec, req, attempts);
+        return { ...r, attempts };
+      } catch (err) {
+        if (err instanceof ModelConfigError) throw err;
+        const outcome = err instanceof ModelRefusalError ? "refused" : err instanceof ModelOutputError ? "invalid_output" : "error";
+        attempts.push({ model: spec, outcome, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    throw new AllModelsFailedError(role, attempts);
+  }
+
+  /**
+   * One tool-calling turn for the role (the project agent). Each model is
+   * tried in order, with a retry on transient provider errors; a model whose
+   * adapter cannot call tools is skipped and logged as an attempt.
+   */
+  async chat(role: Role, req: ChatRequest): Promise<ChatResult & { attempts: AttemptLog[] }> {
+    const attempts: AttemptLog[] = [];
+    for (const spec of this.specs(role)) {
+      const adapter = this.adapter(spec);
+      if (!canChat(adapter)) {
+        attempts.push({ model: spec, outcome: "error", message: "this adapter cannot call tools" });
+        continue;
+      }
+      try {
+        const r = await withTransientRetry(() => adapter.chat(req), this.retryDelaysMs);
+        attempts.push({ model: spec, outcome: "ok" });
         return { ...r, attempts };
       } catch (err) {
         if (err instanceof ModelConfigError) throw err;

@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -7,28 +7,11 @@ import { approveChapterAction, reopenChapterAction, retryFailedRun, setScriptAct
 import { STAGE_LOOK, StarMark } from "@/components/journey/stage-look";
 import { StageRail } from "@/components/journey/stage-rail";
 import { Loading, SetupNeeded } from "@/components/nav";
-import { BreakdownReportView } from "@/components/reports/breakdown-report";
-import { BudgetReportView } from "@/components/reports/budget-report";
-import { ContinuityReportView } from "@/components/reports/continuity-report";
-import { IntakeReportView } from "@/components/reports/intake-report";
-import { LocationsReportView } from "@/components/reports/locations-report";
-import { ScheduleReportView } from "@/components/reports/schedule-report";
-import { StoryReportView } from "@/components/reports/story-report";
-import { StoryTestReportView } from "@/components/reports/story-test-report";
 import { RunDriver } from "@/components/run-driver";
+import { StageReport } from "@/components/stage-report";
 import { databaseProblem, getDb, type Db } from "@/lib/db/client";
-import type { BreakdownReport } from "@/lib/stages/breakdown";
-import type { BudgetReport } from "@/lib/stages/budget";
-import type { ContinuityReport } from "@/lib/stages/continuity";
-import type { IntakeReport } from "@/lib/stages/intake";
-import type { LocationsReport } from "@/lib/stages/locations";
-import type { ScheduleReport } from "@/lib/stages/schedule";
-import type { Skipped, StoryReport } from "@/lib/stages/story";
-import type { StoryTestReport } from "@/lib/stages/story-test";
-import { loadReview } from "@/lib/ui/queries";
 import { loadRun, openHighCount, type ChapterView, type RunView, type StageView } from "@/lib/ui/runs";
 import { summaryOf, TEST_LABEL } from "@/lib/ui/summaries";
-import { presenceFor } from "@/lib/ui/visuals";
 
 /** Each step a production takes is a server action on this page; it saves progress well before this limit. */
 export const maxDuration = 300;
@@ -77,8 +60,8 @@ async function Production({ params, searchParams }: { params: Params; searchPara
       <section className="bg-ink-2 px-6 py-7 text-on-ink sm:px-8">
         <div className="mx-auto flex max-w-[1320px] flex-wrap items-end justify-between gap-5">
           <div>
-            <Link href="/" className="text-sm text-on-ink-2 no-underline hover:text-on-ink">
-              ← All productions
+            <Link href={`/projects/${run.id}`} className="text-sm text-on-ink-2 no-underline hover:text-on-ink">
+              ← Back to the agent workspace
             </Link>
             <h1 className="font-display mt-2 text-[46px] leading-none font-semibold">{run.title}</h1>
             <p className="mt-2 text-sm text-on-ink-2">
@@ -206,7 +189,7 @@ function StatePanel({ run, chapter }: { run: RunView; chapter: ChapterView }) {
       return (
         <section className="card p-7 text-[15px] text-fg-2">
           This production began from a screenplay, so there was no story to test. To develop a story first,{" "}
-          <Link href="/new?from=story" className="font-semibold text-gold-deep">
+          <Link href="/" className="font-semibold text-gold-deep">
             start a new production from a story
           </Link>
           .
@@ -433,31 +416,6 @@ async function Reports({ run, chapter, stageId, db }: { run: RunView; chapter: C
       <StageReport stage={current} run={run} db={db} />
     </section>
   );
-}
-
-async function StageReport({ stage, run, db }: { stage: StageView; run: RunView; db: Db }): Promise<ReactNode> {
-  switch (stage.id) {
-    case "story_test":
-      return <StoryTestReportView r={stage.report as StoryTestReport | Skipped} />;
-    case "intake":
-      return <IntakeReportView r={stage.report as IntakeReport} scriptText={run.scriptText} presence={run.scriptDocId ? await presenceFor(db, run.scriptDocId) : undefined} />;
-    case "story":
-      return <StoryReportView r={stage.report as StoryReport | Skipped} />;
-    case "continuity": {
-      const r = stage.report as ContinuityReport;
-      return <ContinuityReportView r={r} review={await loadReview(db, r.docId)} />;
-    }
-    case "breakdown":
-      return <BreakdownReportView r={stage.report as BreakdownReport} />;
-    case "locations":
-      return <LocationsReportView r={stage.report as LocationsReport} />;
-    case "schedule":
-      return <ScheduleReportView r={stage.report as ScheduleReport} />;
-    case "budget":
-      return <BudgetReportView r={stage.report as BudgetReport} />;
-    default:
-      return null;
-  }
 }
 
 // ---- decision ---------------------------------------------------------------------

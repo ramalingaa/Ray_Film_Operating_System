@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { agentTurn, DEFAULT_GOAL, resumeAgent, sendToAgent, startAgent, stopAgent, type AgentTurnOutcome } from "@/lib/agent/loop";
 import { Ledger } from "@/lib/agents/runtime";
 import { judgeSettingsFromEnv } from "@/lib/checks/judge";
 import { getDb } from "@/lib/db/client";
@@ -107,8 +108,8 @@ export async function startRun(formData: FormData) {
     costumes: await fileText(formData, "costumes"),
     locations: await fileText(formData, "locations"),
   });
-  kickOff(id);
-  redirect(`/runs/${id}`);
+  const goal = String(formData.get("goal") ?? "").trim();
+  await launch(id, goal ? `${DEFAULT_GOAL}\n\nMy notes for this project: ${goal}` : DEFAULT_GOAL);
 }
 
 /** Start a run on the sample screenplay and sheets shipped in data/. */
@@ -116,17 +117,45 @@ export async function startSampleRun() {
   const read = (file: string) => ({ name: file, text: fs.readFileSync(path.join(process.cwd(), "data", file), "utf8") });
   const script = read("script.fountain");
   const id = await createRun(await getDb(), { sourceName: script.name, text: script.text, costumes: read("costumes.csv"), locations: read("locations.csv") });
-  kickOff(id);
-  redirect(`/runs/${id}`);
+  await launch(id);
 }
 
 /**
- * Take the first step on the server right after the response, so a run moves
- * even before the run page starts stepping it. Stage errors are recorded on
- * the run; anything else is logged.
+ * Hand a new project to its agent and open the workspace. The agent's first
+ * turn starts on the server right after the response, so it is already
+ * working when the page loads. Agent errors are recorded on the project;
+ * anything else is logged.
  */
-function kickOff(runId: number) {
-  after(() => advanceRun(runId).catch((err) => console.error(`run ${runId}: first step failed:`, err)));
+async function launch(runId: number, goal = DEFAULT_GOAL): Promise<never> {
+  await startAgent(await getDb(), runId, goal);
+  after(() => advanceAgent(runId).catch((err) => console.error(`project ${runId}: first agent turn failed:`, err)));
+  redirect(`/projects/${runId}`);
+}
+
+// ---- the project agent ----------------------------------------------------------
+
+/** One agent turn (called repeatedly by the workspace while the agent is running). */
+export async function advanceAgent(runId: number): Promise<AgentTurnOutcome> {
+  return agentTurn(await getDb(), runId, {
+    agentGateway: availableGateway(["agent"]).gateway,
+    stageGateway: availableGateway(["extract", "judge"]).gateway,
+    judgeSettings: judgeSettingsFromEnv(),
+  });
+}
+
+export async function sendAgentMessage(formData: FormData) {
+  await sendToAgent(await getDb(), runId(formData), String(formData.get("message") ?? ""));
+  refresh();
+}
+
+export async function stopAgentAction(formData: FormData) {
+  await stopAgent(await getDb(), runId(formData));
+  refresh();
+}
+
+export async function resumeAgentAction(formData: FormData) {
+  await resumeAgent(await getDb(), runId(formData));
+  refresh();
 }
 
 /** Advance a run by one step (called repeatedly by the run page while it is open). */
@@ -144,8 +173,7 @@ export async function retryFailedRun(formData: FormData) {
 export async function startSampleStory() {
   const text = fs.readFileSync(path.join(process.cwd(), "data", "sample-story.txt"), "utf8");
   const id = await createRun(await getDb(), { title: "The Night Ferry", sourceName: "sample story", text });
-  kickOff(id);
-  redirect(`/runs/${id}`);
+  await launch(id);
 }
 
 // ---- chapter gates -------------------------------------------------------------------
