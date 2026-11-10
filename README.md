@@ -32,6 +32,7 @@ npm run db:migrate      # create the tables (Postgres, or local PGlite if DATABA
 npm run ingest          # parse + extract data/script.fountain and the sheets
 npm run checks          # run the 8 continuity checks
 npm run dev             # http://localhost:3000
+npm run worker          # optional: keeps agents working when no page is open
 ```
 
 Without any model key, everything still runs: the parser, the sheets and the
@@ -56,23 +57,29 @@ Set these environment variables in the Vercel project:
 |---|---|
 | `DATABASE_URL` | Supabase **transaction pooler** string (port 6543), with the password URL-encoded (`@` → `%40`) |
 | `OPEN_ROUTER_LLM_KEY` | your OpenRouter key |
+| `CRON_SECRET` | any long random string; required for the background agent worker (Vercel Cron sends it) |
 | `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY`, `MODEL_AGENT` | optional; without them an OpenRouter key routes every role to the free-first default (set `MODEL_AGENT` to a model that supports tool calling) |
 
 Run `npm run db:migrate` once from your machine (with the same `DATABASE_URL`)
 before the first deploy and after any schema change. Functions run in `sin1`
-to sit next to the database. Then open **Load script** in the app to upload a
+to sit next to the database. `vercel.json` schedules the background agent
+worker (`/api/cron/agent`) every minute; per-minute crons need a Vercel Pro
+plan (on Hobby they run once a day, and agents only move while their page is
+open). Then open **Load script** in the app to upload a
 screenplay, or load the bundled sample.
 
 ## The app
 
-- **Workspace** (home): your projects on the left. Start a new one from a
+- **Landing page** (`/`): what the product is and who it is for.
+- **Workspace** (`/projects`): your projects on the left. Start a new one from a
   story or a screenplay (with optional costume and location sheets, and notes
   for the agent), or open a sample. Each project is handed to its own
   **agent**, which works through every chapter on autopilot: it runs the
   tests, reads each report, fixes what it can, approves the chapter, and moves
   on until the production is greenlit. The project page shows the agent's
   live timeline (every tool call and its result) beside the reports it has
-  produced. Message the agent at any time, or stop and resume it.
+  produced. Message the agent at any time, or stop and resume it. The agent
+  keeps working in the background after you close the page.
 - **Chapter-by-chapter view** (`/runs/[id]`): approve, reopen and revise
   chapters by hand.
 - **Review**: the script with line numbers next to the findings, grouped by

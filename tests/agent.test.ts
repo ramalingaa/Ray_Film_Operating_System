@@ -211,3 +211,37 @@ describe("the model-driven agent", () => {
     expect(last).toMatchObject({ kind: "error", content: expect.stringContaining("provider down") });
   });
 });
+
+describe("the background queue", () => {
+  it("runs a turn on every queued project, skips ones that are leased or not running, and finishes jobs over ticks", async () => {
+    const { queuedProjects, runQueue } = await import("@/lib/agent/queue");
+    const db = await openDb(":memory:");
+    const a = await createRun(db, { sourceName: "script.fountain", text: script });
+    const b = await createRun(db, { sourceName: "script.fountain", text: script });
+    const idle = await createRun(db, { sourceName: "script.fountain", text: script });
+    await startAgent(db, a);
+    await startAgent(db, b);
+    await db.update(runs).set({ agentLockedUntil: Date.now() + 60_000 }).where(eq(runs.id, b));
+    expect(await queuedProjects(db, 10)).toEqual([a]);
+
+    await db.update(runs).set({ agentLockedUntil: null }).where(eq(runs.id, b));
+    expect((await queuedProjects(db, 10)).sort()).toEqual([a, b].sort());
+    let tick;
+    for (let i = 0; i < 40; i++) {
+      tick = await runQueue(db, { stageGateway: stageGateway(), judgeSettings, concurrency: 2 });
+      if (tick.waiting === 0) break;
+    }
+    expect(tick!.waiting).toBe(0);
+    expect(await agentStatus(db, a)).toBe("done");
+    expect(await agentStatus(db, b)).toBe("done");
+    expect(await agentStatus(db, idle)).toBe("idle");
+  });
+
+  it("only runs for a cron call that carries the secret, and refuses in production without one", async () => {
+    const { cronAuthorized } = await import("@/lib/agent/queue");
+    expect(cronAuthorized("Bearer s3", { CRON_SECRET: "s3" })).toEqual({ ok: true });
+    expect(cronAuthorized("Bearer nope", { CRON_SECRET: "s3" })).toMatchObject({ ok: false, status: 401 });
+    expect(cronAuthorized(null, { NODE_ENV: "production" })).toMatchObject({ ok: false, status: 500 });
+    expect(cronAuthorized(null, { NODE_ENV: "development" })).toEqual({ ok: true });
+  });
+});

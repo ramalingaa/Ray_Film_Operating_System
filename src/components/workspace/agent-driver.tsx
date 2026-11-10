@@ -7,11 +7,11 @@ import { advanceAgent } from "@/app/actions";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Keeps the project's agent working while its workspace is open: asks the
- * server for one agent turn at a time, and refreshes the page every few
- * seconds meanwhile so each tool call shows up as it happens. Closing the
- * page pauses the agent between turns; reopening it resumes. Safe to mount
- * twice: the server lets one turn hold a project, others get "busy".
+ * Speeds the project's agent up while its workspace is open: asks the server
+ * for one agent turn at a time (instead of waiting for the next background
+ * worker tick), and refreshes the page every few seconds so each tool call
+ * shows up as it happens. The background worker carries on when the page is
+ * closed. Safe alongside it: one turn holds a project, others get "busy".
  */
 export function AgentDriver({ runId, active }: { runId: number; active: boolean }) {
   const router = useRouter();

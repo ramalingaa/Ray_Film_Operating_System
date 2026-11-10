@@ -13,5 +13,5 @@ export default function NewProductionPage({ searchParams }: { searchParams: Sear
 }
 
 async function Redirect({ searchParams }: { searchParams: Search }): Promise<never> {
-  redirect((await searchParams).from === "screenplay" ? "/?from=screenplay" : "/");
+  redirect((await searchParams).from === "screenplay" ? "/projects?from=screenplay" : "/projects");
 }

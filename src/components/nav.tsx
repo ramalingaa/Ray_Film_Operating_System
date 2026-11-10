@@ -2,7 +2,7 @@ import Link from "next/link";
 import { StarMark } from "@/components/journey/stage-look";
 
 const LINKS = [
-  { href: "/", label: "Projects" },
+  { href: "/projects", label: "Projects" },
   { href: "/issues", label: "Pipeline health" },
   ...(process.env.NODE_ENV !== "production" ? [{ href: "/eval", label: "Eval" }] : []),
 ];
@@ -30,7 +30,7 @@ export function Nav() {
               {l.label}
             </Link>
           ))}
-          <Link href="/" className="btn-gold ml-2 min-h-10! px-4.5! text-sm!">
+          <Link href="/projects" className="btn-gold ml-2 min-h-10! px-4.5! text-sm!">
             New project
           </Link>
         </nav>
@@ -45,7 +45,7 @@ export function EmptyState() {
       <StarMark size={32} className="mx-auto mb-3 text-gold" />
       <h1 className="font-display mb-2 text-4xl font-semibold">Nothing here yet</h1>
       <p className="text-fg-2">
-        <Link href="/" className="font-semibold text-gold-deep underline underline-offset-4">
+        <Link href="/projects" className="font-semibold text-gold-deep underline underline-offset-4">
           Start a production
         </Link>{" "}
         from a story or a screenplay.

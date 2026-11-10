@@ -61,7 +61,7 @@ async function Project({ params, searchParams }: { params: Params; searchParams:
           )}
           {status === "running" && (
             <p className="ml-10 flex items-center gap-2 text-sm text-fg-2">
-              <span aria-hidden className="pulse h-2 w-2 rounded-full bg-gold" /> Working. Keep this page open; it continues from where it stopped when you return.
+              <span aria-hidden className="pulse h-2 w-2 rounded-full bg-gold" /> Working in the background. You can close this page; the agent keeps going.
             </p>
           )}
           <AgentDriver runId={id} active={status === "running"} />

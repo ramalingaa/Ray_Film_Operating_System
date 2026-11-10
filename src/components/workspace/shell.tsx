@@ -23,7 +23,7 @@ export async function WorkspaceShell({ db, selected, children }: { db: Db; selec
     <div className="flex flex-1 flex-col lg:flex-row">
       <div className="bg-ink-2 text-on-ink lg:w-[272px] lg:flex-none print:hidden">
         <aside aria-label="Projects" className="flex flex-col gap-3 px-4 py-5 lg:sticky lg:top-0 lg:max-h-dvh lg:overflow-y-auto">
-          <Link href="/" className="btn-gold min-h-11! justify-center text-sm!" aria-current={selected === undefined ? "page" : undefined}>
+          <Link href="/projects" className="btn-gold min-h-11! justify-center text-sm!" aria-current={selected === undefined ? "page" : undefined}>
             <Plus aria-hidden size={16} /> New project
           </Link>
           <p className="eyebrow mt-3 px-2 text-on-ink-2">Projects</p>

@@ -325,4 +325,24 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     state), so the agent's prompt lives in `src/lib/agent/prompt.ts` and has
     no `PROMPT_VERSION`. Each model call is still logged in `agent_runs`
     (`project-agent@1`), and every failed tool call in `pipeline_issues`.
+84. **Approving with open notes is the intended behaviour** (owner's
+    decision). The goal is to get anyone from an idea to a complete first
+    pre-production plan they can see and revise, not to block on every note.
+    The agent names open high-severity notes when it approves; the person
+    reviews and reopens what they want changed.
+85. **Background work is a Postgres queue run by Vercel Cron** (owner's
+    choice). The queue is the `runs` table: a project with agent status
+    "running" and a free lease is a waiting job. `/api/cron/agent` runs every
+    minute and takes one agent turn on each waiting project, three at a time
+    (`AGENT_WORKER_CONCURRENCY`). A turn that crashes leaves its lease to
+    expire and is picked up again. The open workspace page still runs turns
+    directly, so it moves faster while you watch; the shared lease keeps the
+    page and the worker apart. Per-minute cron needs Vercel Pro; on Hobby,
+    crons run once a day, so the page is what moves work along.
+86. **The cron route needs `CRON_SECRET` in production** and refuses to run
+    without it, so nobody else can start model calls on the project's keys.
+    Locally, `npm run worker` runs the same queue in a loop.
+87. **The landing page is at `/` and the workspace at `/projects`.** The
+    landing page is static (no database) and pitches people and the AI
+    working together; `/new` redirects to the workspace.
 

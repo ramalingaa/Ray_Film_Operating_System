@@ -189,7 +189,7 @@ function StatePanel({ run, chapter }: { run: RunView; chapter: ChapterView }) {
       return (
         <section className="card p-7 text-[15px] text-fg-2">
           This production began from a screenplay, so there was no story to test. To develop a story first,{" "}
-          <Link href="/" className="font-semibold text-gold-deep">
+          <Link href="/projects" className="font-semibold text-gold-deep">
             start a new production from a story
           </Link>
           .

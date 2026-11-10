@@ -144,7 +144,15 @@ go back to the model as `{ error }` and into `pipeline_issues`. Without a
 tool-calling model, a scripted policy makes the same calls in the standard
 order.
 
-The UI is a workspace (`/` and `/projects/[id]`): projects on the left, the
+**Background work.** A project whose agent is "running" with a free lease
+(`runs.agent_locked_until`) is a job in the queue (`src/lib/agent/queue.ts`).
+Vercel Cron calls `/api/cron/agent` every minute, and each call takes one turn
+on each waiting project, a few at a time. A crashed turn's lease expires and
+the next tick picks the project up again. While the project page is open it
+also runs turns directly, so work moves faster when someone is watching;
+the lease keeps the two apart. Locally, `npm run worker` runs the same loop.
+
+The UI is a workspace (`/projects` and `/projects/[id]`): projects on the left, the
 agent's live timeline and a message box in the middle, and the reports it has
 produced on the right. The chapter-by-chapter view (`/runs/[id]`) stays for
 manual control.
