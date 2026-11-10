@@ -22,7 +22,7 @@ export function Nav() {
       <div className="mx-auto flex min-h-[68px] max-w-[1320px] flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2">
         <Link href="/" className="flex items-center gap-2.5 text-on-ink no-underline">
           <StarMark size={22} className="text-gold-bright" />
-          <span className="font-display text-[26px] font-semibold tracking-[0.01em]">ReelGraph</span>
+          <span className="font-display text-[26px] font-semibold tracking-[0.01em]">Ray Studio</span>
         </Link>
         <nav aria-label="Main" className="flex flex-wrap items-center gap-1">
           {LINKS.map((l) => (

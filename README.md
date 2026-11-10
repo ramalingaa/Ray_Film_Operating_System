@@ -1,4 +1,4 @@
-# ReelGraph
+# Ray Studio
 
 A story graph for film: from a one-line logline to a pre-production package,
 with every fact traced to its source line and every conflict flagged.

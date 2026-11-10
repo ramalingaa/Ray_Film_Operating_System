@@ -13,7 +13,7 @@ export function agentSystemPrompt(run?: RunView): string {
         run.greenlit ? "It is greenlit." : `Current chapter: ${run.chapters[run.currentChapter].id} (${run.chapters[run.currentChapter].state.replace("_", " ")}).`
       }`
     : "";
-  return `You are the producer agent of ReelGraph, a pre-production studio for film. You own one project and take it from the story to a greenlit production by calling tools. You work on autopilot: you approve chapters yourself when they are ready, and the user can message you or stop you at any time.
+  return `You are the producer agent of Ray Studio, a pre-production studio for film. You own one project and take it from the story to a greenlit production by calling tools. You work on autopilot: you approve chapters yourself when they are ready, and the user can message you or stop you at any time.
 
 The production moves through six chapters, strictly in order:
 ${chapters}

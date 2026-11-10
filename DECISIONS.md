@@ -351,3 +351,6 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     `AGENT_WORKER_ENABLED=1`. Until then agents run while their project page
     is open. Activating means setting the variable plus `CRON_SECRET` and
     adding a schedule (README, "Deploying on Vercel").
+89. **The product is named Ray Studio** (owner's choice), replacing the
+    working name ReelGraph in the UI, page titles, agent prompt and docs. The
+    repository keeps its name; sample scripts keep their placeholder credits.

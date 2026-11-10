@@ -78,7 +78,7 @@ export function createAdapter(spec: string, env: Env = process.env): ModelAdapte
     apiKey,
     baseURL: (def.baseURLEnv && env[def.baseURLEnv]) || def.baseURL,
     jsonMode: def.jsonMode,
-    headers: provider === "openrouter" ? { "HTTP-Referer": "https://github.com/reelgraph", "X-Title": "ReelGraph" } : undefined,
+    headers: provider === "openrouter" ? { "HTTP-Referer": "https://savethecat-eight.vercel.app", "X-Title": "Ray Studio" } : undefined,
     extraBody: provider === "openrouter" ? openRouterReasoning(env) : undefined,
   });
 }

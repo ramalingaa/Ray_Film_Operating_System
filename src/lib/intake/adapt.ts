@@ -36,7 +36,7 @@ const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** Render the structured outline as Fountain. Pure. */
 export function renderOutline(a: Adaptation, title: string): string {
-  const lines = [`Title: ${clean(a.title) || title}`, "Credit: Scene outline generated from a story by ReelGraph", ""];
+  const lines = [`Title: ${clean(a.title) || title}`, "Credit: Scene outline generated from a story by Ray Studio", ""];
   for (const s of a.scenes) {
     const location = clean(s.location).toUpperCase().replace(/^(INT|EXT)\.?\s+/, "") || "UNKNOWN";
     const time = clean(s.time_of_day).toUpperCase() || "DAY";

@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * ReelGraph studio theme (see the design canvas): ink and ivory, gold only for
+ * Ray Studio theme (see the design canvas): ink and ivory, gold only for
  * the one next action on a screen, and one colour per stage.
  */
 :root {

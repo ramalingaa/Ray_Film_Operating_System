@@ -1,6 +1,6 @@
-# ReelGraph architecture
+# Ray Studio architecture
 
-ReelGraph turns a story into a production-ready package: from a one-line
+Ray Studio turns a story into a production-ready package: from a one-line
 logline, through the screenplay, to the pre-production assets a film needs
 (breakdowns, costume plot, location list, prop list, shot list, schedule,
 budget top sheet). Every step is done by an **agent** that works through

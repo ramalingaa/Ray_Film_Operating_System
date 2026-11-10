@@ -16,8 +16,8 @@ const body = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ReelGraph",
-  description: "From the first idea to the first day of shooting, stage by stage.",
+  title: "Ray Studio",
+  description: "Take any idea to a production-ready plan. An AI partner drafts and tests every stage of pre-production; you review, revise and decide.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

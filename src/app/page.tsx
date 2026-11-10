@@ -180,7 +180,7 @@ export default function Landing() {
       <footer className="border-t border-line px-6 py-8 text-sm text-muted sm:px-8">
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3">
           <span className="flex items-center gap-2">
-            <StarMark size={14} className="text-gold" /> ReelGraph · pre-production for everyone with a story
+            <StarMark size={14} className="text-gold" /> Ray Studio · pre-production for everyone with a story
           </span>
           <Link href="/projects" className="text-fg-2">
             Your projects

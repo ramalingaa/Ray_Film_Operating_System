@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# ReelGraph — working rules
+# Ray Studio — working rules
 
 - Product spec for the current phase: `docs/spec-continuity-poc.md`. System design: `ARCHITECTURE.md`. Ambiguity log: `DECISIONS.md`.
 - Work one milestone at a time (M0–M7 in the spec). State the plan first; run `npm test` and `npm run typecheck` before committing; commit after each milestone.
