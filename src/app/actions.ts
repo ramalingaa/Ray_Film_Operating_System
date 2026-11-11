@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { agentTurn, DEFAULT_GOAL, resumeAgent, sendToAgent, startAgent, stopAgent, type AgentTurnOutcome } from "@/lib/agent/loop";
+import { agentTurn, resumeAgent, sendToAgent, stopAgent, welcomeProject, type AgentTurnOutcome, type Attachment } from "@/lib/agent/loop";
 import { Ledger } from "@/lib/agents/runtime";
 import { judgeSettingsFromEnv } from "@/lib/checks/judge";
 import { getDb } from "@/lib/db/client";
@@ -15,7 +15,7 @@ import { applySceneEdit, applyScriptEdit } from "@/lib/impact/apply";
 import { availableGateway } from "@/lib/llm/available";
 import {
   approveChapter,
-  createRun,
+  createProject,
   reopenChapter,
   retryRun,
   setScript,
@@ -95,41 +95,38 @@ async function fileText(formData: FormData, name: string): Promise<{ name: strin
   return { name: f.name, text: await f.text() };
 }
 
-/** Start a run from an uploaded file or pasted text (a screenplay or a story), then open it. */
-export async function startRun(formData: FormData) {
-  const file = await fileText(formData, "file");
-  const pasted = String(formData.get("text") ?? "");
-  const input = file ?? (pasted.trim() ? { name: "pasted text", text: pasted } : undefined);
-  if (!input) throw new Error("Upload a file or paste a script or story.");
-  const id = await createRun(await getDb(), {
-    title: String(formData.get("title") ?? ""),
-    sourceName: input.name,
-    text: input.text,
-    costumes: await fileText(formData, "costumes"),
-    locations: await fileText(formData, "locations"),
-  });
-  const goal = String(formData.get("goal") ?? "").trim();
-  await launch(id, goal ? `${DEFAULT_GOAL}\n\nMy notes for this project: ${goal}` : DEFAULT_GOAL);
+/** Start a chat-first project: only its name. Everything else happens in the conversation with its agent. */
+export async function startProject(formData: FormData) {
+  const db = await getDb();
+  const title = String(formData.get("title") ?? "");
+  const id = await createProject(db, title);
+  await welcomeProject(db, id, title.trim());
+  redirect(`/projects/${id}`);
 }
 
-/** Start a run on the sample screenplay and sheets shipped in data/. */
-export async function startSampleRun() {
-  const read = (file: string) => ({ name: file, text: fs.readFileSync(path.join(process.cwd(), "data", file), "utf8") });
-  const script = read("script.fountain");
-  const id = await createRun(await getDb(), { sourceName: script.name, text: script.text, costumes: read("costumes.csv"), locations: read("locations.csv") });
-  await launch(id);
-}
+const readSample = (file: string) => ({ name: file, text: fs.readFileSync(path.join(process.cwd(), "data", file), "utf8") });
 
 /**
- * Hand a new project to its agent and open the workspace. The agent's first
- * turn starts on the server right after the response, so it is already
- * working when the page loads. Agent errors are recorded on the project;
- * anything else is logged.
+ * Open a sample the way a person would: a new project, then a first message
+ * with the files attached. The agent takes it from there.
  */
-async function launch(runId: number, goal = DEFAULT_GOAL): Promise<never> {
-  await startAgent(await getDb(), runId, goal);
-  after(() => advanceAgent(runId).catch((err) => console.error(`project ${runId}: first agent turn failed:`, err)));
-  redirect(`/projects/${runId}`);
+async function startSample(title: string, message: string, files: { name: string; text: string }[]): Promise<never> {
+  const db = await getDb();
+  const id = await createProject(db, title);
+  await welcomeProject(db, id, title);
+  await sendToAgent(db, id, message, files);
+  after(() => advanceAgent(id).catch((err) => console.error(`project ${id}: first agent turn failed:`, err)));
+  redirect(`/projects/${id}`);
+}
+
+/** The sample screenplay and its sheets, shipped in data/. */
+export async function startSampleRun() {
+  await startSample("The Keeper's Ledger", "Here is my screenplay, with the costume and location sheets.", [readSample("script.fountain"), readSample("costumes.csv"), readSample("locations.csv")]);
+}
+
+/** The sample story, shipped in data/. */
+export async function startSampleStory() {
+  await startSample("The Night Ferry", "Here is my story. Take it all the way to a plan.", [readSample("sample-story.txt")]);
 }
 
 // ---- the project agent ----------------------------------------------------------
@@ -143,9 +140,23 @@ export async function advanceAgent(runId: number): Promise<AgentTurnOutcome> {
   });
 }
 
-export async function sendAgentMessage(formData: FormData) {
-  await sendToAgent(await getDb(), runId(formData), String(formData.get("message") ?? ""));
+/**
+ * Send the user's message and any attached files. Returns an error message
+ * instead of throwing, so the composer can show it (production hides thrown
+ * errors).
+ */
+export async function sendAgentMessage(formData: FormData): Promise<{ error?: string }> {
+  try {
+    const files: Attachment[] = [];
+    for (const f of formData.getAll("files")) {
+      if (f instanceof File && f.size > 0) files.push({ name: f.name, text: await f.text() });
+    }
+    await sendToAgent(await getDb(), runId(formData), String(formData.get("message") ?? ""), files);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
   refresh();
+  return {};
 }
 
 export async function stopAgentAction(formData: FormData) {
@@ -167,13 +178,6 @@ export async function advanceRun(runId: number): Promise<StepOutcome> {
 export async function retryFailedRun(formData: FormData) {
   await retryRun(await getDb(), Number(formData.get("id")));
   refresh();
-}
-
-/** Start a production from the sample story in data/. */
-export async function startSampleStory() {
-  const text = fs.readFileSync(path.join(process.cwd(), "data", "sample-story.txt"), "utf8");
-  const id = await createRun(await getDb(), { title: "The Night Ferry", sourceName: "sample story", text });
-  await launch(id);
 }
 
 // ---- chapter gates -------------------------------------------------------------------

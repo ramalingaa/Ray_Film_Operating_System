@@ -10,7 +10,7 @@ const STATE_TEXT: Record<string, string> = {
   approved: "Approved",
   ready: "Ready",
   working: "Working",
-  awaiting_input: "Needs a screenplay",
+  awaiting_input: "Your move",
   failed: "Failed",
   locked: "Locked",
   skipped: "Skipped",

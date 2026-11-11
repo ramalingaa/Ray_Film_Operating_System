@@ -7,9 +7,12 @@ const nextConfig: NextConfig = {
   // The sample script and sheets are read at runtime by the "Run the sample screenplay" action.
   outputFileTracingIncludes: {
     "/": ["./data/script.fountain", "./data/costumes.csv", "./data/locations.csv", "./data/sample-story.txt"],
-    "/new": ["./data/script.fountain", "./data/costumes.csv", "./data/locations.csv", "./data/sample-story.txt"],
+    "/projects": ["./data/script.fountain", "./data/costumes.csv", "./data/locations.csv", "./data/sample-story.txt"],
   },
   partialPrefetching: true,
+  // Screenplays and sheets are attached to chat messages, which are server actions (default limit 1 MB).
+  // Vercel caps request bodies at 4.5 MB.
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   turbopack: {
     root: __dirname,
     rules: {

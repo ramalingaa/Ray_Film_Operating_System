@@ -39,14 +39,14 @@ async function Project({ params, searchParams }: { params: Params; searchParams:
 
   return (
     <WorkspaceShell db={db} selected={id}>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-card px-6 py-4 sm:px-8">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line bg-card px-5 py-3 sm:px-8 sm:py-4">
         <div className="min-w-0">
-          <h1 className="font-display truncate text-[34px] leading-none font-semibold">{run.title}</h1>
-          <p className="mt-1.5 text-[13px] text-muted">
-            Started from a {run.inputKind} · {run.createdAt.slice(0, 10)}
+          <h1 className="font-display truncate text-[26px] leading-none font-semibold sm:text-[34px]">{run.title}</h1>
+          <p className="mt-1 text-[13px] text-muted sm:mt-1.5">
+            {run.hasMaterial ? `Started from a ${run.inputKind}` : "New project"} · {run.createdAt.slice(0, 10)}
           </p>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-full bg-ink px-3.5 py-1.5 text-sm font-semibold text-on-ink">
+        <span className="inline-flex items-center gap-2 rounded-full bg-ink px-3 py-1 text-[13px] font-semibold text-on-ink sm:px-3.5 sm:py-1.5 sm:text-sm">
           <span aria-hidden className={`h-2 w-2 rounded-full ${status === "running" ? "pulse" : ""}`} style={{ background: STATUS_DOT[status] }} />
           Agent: {AGENT_STATUS_TEXT[status]}
         </span>
@@ -67,7 +67,7 @@ async function Project({ params, searchParams }: { params: Params; searchParams:
           <AgentDriver runId={id} active={status === "running"} />
           <StickToBottom count={items.length} />
           <div className="sticky bottom-0 -mx-1 bg-gradient-to-t from-ivory via-ivory to-transparent px-1 pt-6 pb-3">
-            <Composer runId={id} status={status} />
+            <Composer runId={id} status={status} hasMaterial={run.hasMaterial} />
           </div>
         </section>
 

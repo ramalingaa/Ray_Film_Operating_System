@@ -23,7 +23,7 @@ import type { ToolCall } from "../llm/types";
 import { loadRun, type RunView } from "../ui/runs";
 import { agentSystemPrompt } from "./prompt";
 import { runTool, toolSpecs, type ToolEnv } from "./tools";
-import { toChatMessages } from "./transcript";
+import { parseData, toChatMessages } from "./transcript";
 
 const now = () => new Date().toISOString();
 
@@ -69,11 +69,43 @@ export async function startAgent(db: Db, runId: number, goal = DEFAULT_GOAL): Pr
   await setStatus(db, runId, "running");
 }
 
-/** A message from the user. It always wakes the agent, which reads it on its next decision. */
-export async function sendToAgent(db: Db, runId: number, text: string): Promise<void> {
-  if (!text.trim()) throw new Error("The message is empty.");
-  await addEvent(db, runId, { kind: "user", content: text.trim() });
+export interface Attachment {
+  name: string;
+  text: string;
+}
+
+export const ATTACHMENT_TYPES = /\.(txt|md|markdown|text|fountain|spmd|fdx|csv)$/i;
+const MAX_ATTACHMENT_CHARS = 600_000;
+
+/**
+ * A message from the user, with any files they attached (stories,
+ * screenplays, sheets). It always wakes the agent, which reads it on its next
+ * decision. Attachments are kept with the message so a tool can use their
+ * full text later.
+ */
+export async function sendToAgent(db: Db, runId: number, text: string, attachments: Attachment[] = []): Promise<void> {
+  const files = attachments.filter((a) => a.text.trim());
+  if (!text.trim() && !files.length) throw new Error("The message is empty.");
+  for (const f of files) {
+    if (!ATTACHMENT_TYPES.test(f.name)) throw new Error(`${f.name}: attach text files only (.txt, .md, .fountain, .fdx or .csv).`);
+    if (f.text.length > MAX_ATTACHMENT_CHARS) throw new Error(`${f.name} is too long (${f.text.length.toLocaleString()} characters; the limit is ${MAX_ATTACHMENT_CHARS.toLocaleString()}).`);
+  }
+  await addEvent(db, runId, {
+    kind: "user",
+    content: text.trim(),
+    data: files.length ? { attachments: files.map((f) => ({ name: f.name, text: f.text.replace(/^\uFEFF/, ""), words: f.text.split(/\s+/).filter(Boolean).length })) } : undefined,
+  });
   await setStatus(db, runId, "running");
+}
+
+/** The agent's opening line in a new chat-first project. It waits for the user's first message. */
+export async function welcomeProject(db: Db, runId: number, title: string): Promise<void> {
+  await addEvent(db, runId, {
+    kind: "assistant",
+    content: `Welcome to ${title}. What are we making? Paste a logline or a few paragraphs of story, or attach a screenplay (Fountain, Final Draft or plain text). Costume and location sheets are welcome too. I'll take it from there, from the story through to a budget, and check in with you along the way.`,
+    data: { model: "welcome" },
+  });
+  await setStatus(db, runId, "waiting");
 }
 
 /** Stop after the current tool call. */
@@ -95,8 +127,18 @@ export async function resumeAgent(db: Db, runId: number): Promise<void> {
  * state. Used when no tool-calling model is configured, and as the reference
  * the model-driven agent is tested against.
  */
-export function scriptedDecision(run: RunView, recentTools: string[] = []): { text: string; call: Omit<ToolCall, "id"> } {
+export function scriptedDecision(run: RunView, recentTools: string[] = [], lastUser?: { text: string; attachments: number }): { text: string; call: Omit<ToolCall, "id"> } {
   const lastTool = recentTools.at(-1);
+  if (!run.hasMaterial) {
+    const words = lastUser?.text.split(/\s+/).filter(Boolean).length ?? 0;
+    if (lastUser && (lastUser.attachments > 0 || words >= 25) && lastTool !== "adopt_material") {
+      return { text: "Thanks. Let me read it in.", call: { name: "adopt_material", input: { from: "latest", as: "auto" } } };
+    }
+    return {
+      text: "",
+      call: { name: "ask_user", input: { question: "Tell me about the film: paste a logline or a few paragraphs of story (25 words or more), or attach a screenplay." } },
+    };
+  }
   if (run.greenlit) {
     return { text: "", call: { name: "finish", input: { summary: `${run.title} is greenlit: all ${run.chapters.length} chapters are approved.` } } };
   }
@@ -193,12 +235,14 @@ export async function agentTurn(db: Db, runId: number, opts: AgentTurnOptions): 
           const prior = await db.select({ tool: agentEvents.tool }).from(agentEvents).where(and(eq(agentEvents.runId, runId), eq(agentEvents.kind, "tool"))).orderBy(asc(agentEvents.id));
           recentTools.push(...prior.slice(-6).map((p) => p.tool ?? ""));
         }
-        const d = scriptedDecision(run, recentTools);
+        const [lastUserRow] = await db.select().from(agentEvents).where(and(eq(agentEvents.runId, runId), eq(agentEvents.kind, "user"))).orderBy(desc(agentEvents.id)).limit(1);
+        const lastUser = lastUserRow ? { text: lastUserRow.content, attachments: (parseData<{ attachments?: unknown[] }>(lastUserRow).attachments ?? []).length } : undefined;
+        const d = scriptedDecision(run, recentTools, lastUser);
         text = d.text;
         // The scripted policy cannot read messages; say so instead of silently ignoring one.
         const [last] = await db.select({ kind: agentEvents.kind, id: agentEvents.id }).from(agentEvents).where(eq(agentEvents.runId, runId)).orderBy(desc(agentEvents.id)).limit(1);
         const [firstEvent] = await db.select({ id: agentEvents.id }).from(agentEvents).where(eq(agentEvents.runId, runId)).orderBy(asc(agentEvents.id)).limit(1);
-        if (n === 0 && last?.kind === "user" && last.id !== firstEvent?.id) {
+        if (n === 0 && last?.kind === "user" && last.id !== firstEvent?.id && run.hasMaterial) {
           text = `${NO_MODEL_NOTE}${text ? `\n\n${text}` : ""}`;
         }
         calls = [{ id: scriptedId(), ...d.call }];

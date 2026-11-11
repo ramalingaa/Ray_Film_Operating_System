@@ -19,6 +19,23 @@ export interface AssistantData {
   model?: string;
 }
 
+export interface UserData {
+  attachments?: { name: string; text: string; words: number }[];
+}
+
+const PREVIEW_CHARS = 1500;
+
+/** What the model reads for a user message: the text, then each attachment's name, size and opening. */
+export function userMessageText(e: Pick<AgentEventRow, "content" | "dataJson">): string {
+  const files = parseData<UserData>(e).attachments ?? [];
+  const parts = e.content.trim() ? [e.content.trim()] : [];
+  for (const f of files) {
+    const preview = f.text.length > PREVIEW_CHARS ? `${f.text.slice(0, PREVIEW_CHARS)}\n… (${f.words.toLocaleString()} words in all)` : f.text;
+    parts.push(`[Attached file: ${f.name}, ${f.words.toLocaleString()} words. Use adopt_material to use it. It begins:]\n${preview}`);
+  }
+  return parts.join("\n\n") || "(empty message)";
+}
+
 export interface ToolData {
   input?: Record<string, unknown>;
   output?: unknown;
@@ -55,8 +72,9 @@ export function toChatMessages(events: AgentEventRow[], opts: { keepFull?: numbe
   events.forEach((e, i) => {
     const recent = i >= events.length - keepFull;
     if (e.kind === "user") {
-      if (pending.length) deferred.push(e.content);
-      else out.push({ role: "user", content: e.content });
+      const text = userMessageText(e);
+      if (pending.length) deferred.push(text);
+      else out.push({ role: "user", content: text });
     } else if (e.kind === "assistant") {
       closePending();
       flushDeferred();

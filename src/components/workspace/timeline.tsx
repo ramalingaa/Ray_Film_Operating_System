@@ -1,4 +1,4 @@
-import { Check, CircleHelp, Flag, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { Check, CircleHelp, FileText, Flag, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import { StarMark } from "@/components/journey/stage-look";
 import { TOOL_LABEL, type TimelineItem } from "@/lib/ui/agent";
 import { TEST_LABEL } from "@/lib/ui/summaries";
@@ -95,8 +95,21 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
         switch (item.type) {
           case "user":
             return (
-              <li key={key} className="ml-10 self-end rounded-[20px] rounded-br-md bg-fg px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-ivory">
-                {item.text}
+              <li key={key} className="ml-10 flex max-w-[calc(100%-2.5rem)] flex-col items-end gap-1.5 self-end">
+                {item.files.length > 0 && (
+                  <ul className="flex flex-wrap justify-end gap-1.5">
+                    {item.files.map((f, j) => (
+                      <li key={`${f.name}-${j}`} className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-card px-3 py-2 text-[13px]">
+                        <FileText aria-hidden size={14} className="flex-none text-fg-2" />
+                        <span className="font-semibold">{f.name}</span>
+                        <span className="text-muted">{f.words.toLocaleString()} words</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {item.text && (
+                  <p className={`rounded-[20px] rounded-br-md bg-fg px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap text-ivory ${item.text.length > 600 ? "max-h-72 overflow-y-auto" : ""}`}>{item.text}</p>
+                )}
               </li>
             );
           case "agent":

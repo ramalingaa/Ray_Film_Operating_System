@@ -1,49 +1,48 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { startSampleRun, startSampleStory } from "@/app/actions";
-import { StartForm } from "@/components/journey/start-form";
+import { StarMark } from "@/components/journey/stage-look";
 import { Loading, SetupNeeded } from "@/components/nav";
+import { NewProjectForm } from "@/components/workspace/new-project";
 import { WorkspaceShell } from "@/components/workspace/shell";
 import { databaseProblem, getDb } from "@/lib/db/client";
 
-/** Starting a project also takes the agent's first turn in the background, which can take minutes. */
+/** Opening a sample also takes the agent's first turn in the background, which can take minutes. */
 export const maxDuration = 300;
 
-type Search = Promise<Record<string, string | string[] | undefined>>;
-
-export default function ProjectsHome({ searchParams }: { searchParams: Search }) {
+export default function ProjectsHome() {
   return (
     <Suspense fallback={<Loading />}>
-      <Workspace searchParams={searchParams} />
+      <Workspace />
     </Suspense>
   );
 }
 
-async function Workspace({ searchParams }: { searchParams: Search }) {
+async function Workspace() {
   await connection();
   const problem = databaseProblem();
   if (problem) return <SetupNeeded problem={problem} />;
-  const from = (await searchParams).from === "screenplay" ? "screenplay" : "story";
   const sample = (action: () => Promise<void>, label: string) => (
-    <form action={action}>
-      <button className="btn-ink-ghost min-h-11! text-sm! text-gold-bright!">{label}</button>
+    <form action={action} className="inline">
+      <button className="cursor-pointer font-semibold text-gold-deep underline underline-offset-4">{label}</button>
     </form>
   );
   return (
     <WorkspaceShell db={await getDb()}>
-      <div className="px-6 pt-10 pb-24 sm:px-10">
-        <div className="mx-auto max-w-[1180px]">
-          <p className="eyebrow text-gold-deep">New project</p>
-          <p className="mt-2 max-w-[720px] text-[17px] leading-relaxed text-fg-2">
-            Give the agent a story or a screenplay. It works through every stage on its own (story, screenplay, breakdown, places, schedule, budget), using the same tested tools a
-            production office would, and shows each step as it goes. Message it or stop it at any time.
+      <div className="flex flex-1 items-center justify-center px-6 py-16 sm:px-10">
+        <div className="flex w-full max-w-[640px] flex-col items-center text-center">
+          <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-ink text-gold-bright">
+            <StarMark size={24} />
+          </span>
+          <h1 className="font-display mt-6 text-[44px] leading-[1.05] font-semibold sm:text-[52px]">What are we making?</h1>
+          <p className="mt-3 max-w-[520px] text-[17px] leading-relaxed text-fg-2">
+            Name the project and start a conversation. Share your idea, a story or a screenplay in the chat, and the agent takes it from there with you.
           </p>
-          <div className="mt-8">
-            <StartForm
-              key={from}
-              initial={from}
-              samples={{ story: sample(startSampleStory, "Open “The Night Ferry”"), screenplay: sample(startSampleRun, "Open “The Keeper’s Ledger”") }}
-            />
+          <div className="mt-8 w-full">
+            <NewProjectForm />
+          </div>
+          <div className="mt-6 text-sm text-fg-2">
+            Or open a sample: {sample(startSampleStory, "The Night Ferry")} (a story) · {sample(startSampleRun, "The Keeper’s Ledger")} (a screenplay)
           </div>
         </div>
       </div>

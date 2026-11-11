@@ -360,4 +360,15 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
     workspace page failed. Builds without DATABASE_URL skip the step; a failed
     migration fails the build. Migrations are additive, so a preview build
     migrating a shared database is safe for the running production code.
+91. **Projects start as a chat** (owner's decision). The only form asks for
+    the project's name; the story, screenplay, sheets and notes arrive as
+    chat messages and attached files (`agent_events` keeps each file's text).
+    The agent takes them in with `adopt_material`, which classifies the text
+    (story, Fountain, Final Draft) and recognises CSV sheets by name or
+    header, or shapes a story with the person and saves it with
+    `write_story` once they agree. A project has no material until then
+    (`inputText` is empty) and no stage can run. The model sees each
+    attachment's name, size and first 1,500 characters, not the whole file.
+    Samples open the same way: a new project and a first message with the
+    files attached.
 

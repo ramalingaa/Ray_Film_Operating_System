@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Plus } from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
 import { STAGE_LOOK } from "@/components/journey/stage-look";
 import type { Db } from "@/lib/db/client";
 import type { AgentStatus } from "@/lib/db/schema";
@@ -21,24 +21,35 @@ export async function WorkspaceShell({ db, selected, children }: { db: Db; selec
   const projects = await listProjects(db);
   return (
     <div className="flex flex-1 flex-col lg:flex-row">
-      <div className="bg-ink-2 text-on-ink lg:w-[272px] lg:flex-none print:hidden">
+      {/* Phones: inside a project, a slim bar instead of the project list, so the chat comes first. */}
+      {selected !== undefined && (
+        <nav aria-label="Projects" className="flex items-center justify-between gap-3 bg-ink-2 px-4 py-2.5 text-sm text-on-ink lg:hidden print:hidden">
+          <Link href="/projects" className="inline-flex items-center gap-1.5 text-on-ink-2 no-underline">
+            <ChevronLeft aria-hidden size={16} /> All projects ({projects.length})
+          </Link>
+          <Link href="/projects" className="inline-flex items-center gap-1 font-semibold text-gold-bright no-underline">
+            <Plus aria-hidden size={15} /> New
+          </Link>
+        </nav>
+      )}
+      <div className={`bg-ink-2 text-on-ink lg:block lg:w-[272px] lg:flex-none print:hidden ${selected !== undefined ? "hidden" : ""}`}>
         <aside aria-label="Projects" className="flex flex-col gap-3 px-4 py-5 lg:sticky lg:top-0 lg:max-h-dvh lg:overflow-y-auto">
           <Link href="/projects" className="btn-gold min-h-11! justify-center text-sm!" aria-current={selected === undefined ? "page" : undefined}>
             <Plus aria-hidden size={16} /> New project
           </Link>
           <p className="eyebrow mt-3 px-2 text-on-ink-2">Projects</p>
           {projects.length === 0 && <p className="px-2 text-sm text-on-ink-2">None yet. Start one and an agent takes it from there.</p>}
-          <ul className="flex gap-1.5 overflow-x-auto lg:flex-col lg:overflow-visible">
+          <ul className="flex flex-col gap-1.5">
             {projects.map((p) => {
               const greenlit = p.approvedThrough >= CHAPTERS.length - 1;
               const current = CHAPTERS[Math.min(CHAPTERS.length - 1, Math.max(0, p.approvedThrough + 1))];
               const active = p.id === selected;
               return (
-                <li key={p.id} className="flex-none lg:flex-auto">
+                <li key={p.id}>
                   <Link
                     href={`/projects/${p.id}`}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-w-[200px] flex-col gap-1 rounded-xl px-3 py-2.5 no-underline transition lg:min-w-0 ${active ? "bg-white/12" : "hover:bg-white/6"}`}
+                    className={`flex flex-col gap-1 rounded-xl px-3 py-2.5 no-underline transition ${active ? "bg-white/12" : "hover:bg-white/6"}`}
                   >
                     <span className="truncate text-[15px] font-semibold text-on-ink">{p.title}</span>
                     <span className="flex items-center gap-2 text-xs text-on-ink-2">

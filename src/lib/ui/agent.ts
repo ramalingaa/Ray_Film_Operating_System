@@ -3,12 +3,12 @@
  * paired with its result (or shown as running), and status rows become notes.
  */
 import { asc, desc, eq } from "drizzle-orm";
-import { parseData, type AssistantData, type ToolData } from "../agent/transcript";
+import { parseData, type AssistantData, type ToolData, type UserData } from "../agent/transcript";
 import type { Db } from "../db/client";
 import { agentEvents, runs, type AgentStatus } from "../db/schema";
 
 export type TimelineItem =
-  | { type: "user"; id: number; text: string; at: string }
+  | { type: "user"; id: number; text: string; files: { name: string; words: number }[]; at: string }
   | { type: "agent"; id: number; text: string; model?: string; at: string }
   | { type: "tool"; id: number; tool: string; input: Record<string, unknown>; state: "running" | "ok" | "error"; summary: string; output?: unknown; at: string }
   | { type: "error"; id: number; text: string; at: string }
@@ -19,7 +19,10 @@ export async function loadTimeline(db: Db, runId: number): Promise<TimelineItem[
   const items: TimelineItem[] = [];
   const byCall = new Map<string, Extract<TimelineItem, { type: "tool" }>>();
   for (const r of rows) {
-    if (r.kind === "user") items.push({ type: "user", id: r.id, text: r.content, at: r.createdAt });
+    if (r.kind === "user") {
+      const files = (parseData<UserData>(r).attachments ?? []).map((f) => ({ name: f.name, words: f.words }));
+      items.push({ type: "user", id: r.id, text: r.content, files, at: r.createdAt });
+    }
     else if (r.kind === "error") items.push({ type: "error", id: r.id, text: r.content, at: r.createdAt });
     else if (r.kind === "status") items.push({ type: "note", id: r.id, text: r.content, at: r.createdAt });
     else if (r.kind === "assistant") {
@@ -72,6 +75,8 @@ export const AGENT_STATUS_TEXT: Record<AgentStatus, string> = {
 /** Plain-language label for a tool call in the timeline. */
 export const TOOL_LABEL: Record<string, string> = {
   get_status: "Checked the project",
+  adopt_material: "Took in your material",
+  write_story: "Saved the story",
   run_current_chapter: "Ran the chapter's tests",
   read_report: "Read a report",
   read_document: "Read the text",

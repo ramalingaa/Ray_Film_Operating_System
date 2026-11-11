@@ -80,16 +80,16 @@ screenplay, or load the bundled sample.
 ## The app
 
 - **Landing page** (`/`): what the product is and who it is for.
-- **Workspace** (`/projects`): your projects on the left. Start a new one from a
-  story or a screenplay (with optional costume and location sheets, and notes
-  for the agent), or open a sample. Each project is handed to its own
-  **agent**, which works through every chapter on autopilot: it runs the
-  tests, reads each report, fixes what it can, approves the chapter, and moves
-  on until the production is greenlit. The project page shows the agent's
-  live timeline (every tool call and its result) beside the reports it has
-  produced. Message the agent at any time, or stop and resume it. Once the
-  background worker is activated, the agent keeps working after you close
-  the page.
+- **Workspace** (`/projects`): your projects on the left. A new project asks
+  only for its name; everything else happens in a chat with the project's
+  **agent**. Paste a logline or a story, or attach a screenplay (Fountain,
+  Final Draft or text) and costume and location sheets (CSV). With only a
+  rough idea, the agent helps you shape a short story first. Then it works
+  through every chapter on autopilot: it runs the tests, reads each report,
+  fixes what it can, approves the chapter, and moves on until the production
+  is greenlit. The project page shows the conversation, with every tool call
+  and its result, beside the reports produced so far. Message the agent at
+  any time, or stop and resume it.
 - **Chapter-by-chapter view** (`/runs/[id]`): approve, reopen and revise
   chapters by hand.
 - **Review**: the script with line numbers next to the findings, grouped by

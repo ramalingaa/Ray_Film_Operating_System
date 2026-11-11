@@ -253,3 +253,90 @@ export async function writeScriptFromStory(db: Db, runId: number): Promise<void>
   await resetStages(db, runId, CHAPTERS[1].stages);
   await db.update(runs).set({ scriptText: null, scriptMode: "adapt", scriptGenerated: false, status: "running", updatedAt: now() }).where(eq(runs.id, runId));
 }
+
+// ---- chat-first projects ------------------------------------------------------------
+
+/**
+ * A project that starts as a conversation: only its name is known. The story
+ * or screenplay arrives later through the chat (`setMaterial`). Until then
+ * `inputText` is empty and no stage can run.
+ */
+export async function createProject(db: Db, title: string): Promise<number> {
+  const name = title.trim();
+  if (!name) throw new Error("Give the project a name.");
+  if (name.length > 120) throw new Error("Keep the project name under 120 characters.");
+  const [row] = await db
+    .insert(runs)
+    .values({ title: name, inputKind: "story", sourceName: "chat", inputText: "", approvedThrough: -1, status: "done", updatedAt: now() })
+    .returning({ id: runs.id });
+  await ensureStages(db, row.id);
+  return row.id;
+}
+
+/** Whether the project has its story or screenplay yet. */
+export function hasMaterial(run: Pick<RunRow, "inputText" | "storyText" | "scriptText">): boolean {
+  return !!(run.inputText.trim() || run.storyText || run.scriptText);
+}
+
+export interface MaterialInput {
+  text: string;
+  sourceName: string;
+  /** "auto" classifies the text (Fountain, Final Draft, or prose). */
+  as?: "auto" | "story" | "screenplay";
+}
+
+/**
+ * Give a project its story or screenplay. The first time, this sets where
+ * the production starts (a story at chapter I, a screenplay at chapter II,
+ * like `createRun`). Afterwards it revises: a story goes through
+ * `updateStory`, a screenplay through `setScript`, with their rules.
+ */
+export async function setMaterial(db: Db, runId: number, input: MaterialInput): Promise<{ kind: "story" | "screenplay"; words: number; first: boolean }> {
+  const text = input.text.replace(/^﻿/, "");
+  if (!text.trim()) throw new Error("That text is empty.");
+  if (text.length > MAX_INPUT_CHARS) throw new Error(`That text is too long (${text.length.toLocaleString()} characters; the limit is ${MAX_INPUT_CHARS.toLocaleString()}).`);
+  const c = classifyInput(text, input.sourceName);
+  const kind = input.as === "story" || input.as === "screenplay" ? input.as : c.kind;
+  if (kind === "screenplay" && c.kind !== "screenplay") {
+    throw new Error("This does not read as a screenplay (no scene headings such as INT. KITCHEN - DAY). Use it as a story instead.");
+  }
+  const run = await getRun(db, runId);
+  if (hasMaterial(run)) {
+    if (kind === "story") await updateStory(db, runId, text);
+    else await setScript(db, runId, text);
+    return { kind, words: c.words, first: false };
+  }
+  const title = run.title || c.parsed?.titlePage.title?.trim() || "Untitled";
+  await resetStages(db, runId, STAGES.map((s) => s.id));
+  await db
+    .update(runs)
+    .set({
+      title,
+      inputKind: kind,
+      sourceName: input.sourceName,
+      inputText: text,
+      storyText: kind === "story" ? text : null,
+      scriptText: kind === "screenplay" ? text : null,
+      scriptMode: kind === "screenplay" ? "own" : null,
+      approvedThrough: kind === "screenplay" ? 0 : -1,
+      status: "running",
+      updatedAt: now(),
+    })
+    .where(eq(runs.id, runId));
+  return { kind, words: c.words, first: true };
+}
+
+/** Attach a costume or location sheet. It is read the next time the screenplay chapter runs. */
+export async function setSheet(db: Db, runId: number, sheet: "costumes" | "locations", file: { name: string; text: string }): Promise<void> {
+  if (!file.text.trim()) throw new Error("That sheet is empty.");
+  const patch = sheet === "costumes" ? { costumesName: file.name, costumesText: file.text } : { locationsName: file.name, locationsText: file.text };
+  await db.update(runs).set({ ...patch, updatedAt: now() }).where(eq(runs.id, runId));
+}
+
+/** Which sheet a CSV is, from its name or header row, or undefined if it is neither. */
+export function sheetKind(name: string, text: string): "costumes" | "locations" | undefined {
+  const header = text.replace(/^﻿/, "").split(/\r?\n/, 1)[0].toLowerCase();
+  if (/costume|wardrobe/i.test(name) || /\bcostume\b/.test(header)) return "costumes";
+  if (/location/i.test(name) || /\blocation_name\b/.test(header)) return "locations";
+  return undefined;
+}

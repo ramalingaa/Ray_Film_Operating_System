@@ -5,7 +5,7 @@
  * and keeps every citation. A tool never throws: failures come back as
  * `{ error }` for the model to read, and are logged as pipeline issues.
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { Ledger } from "../agents/runtime";
 import type { JudgeSettings } from "../checks/judge";
@@ -13,7 +13,8 @@ import type { Db } from "../db/client";
 import { agentEvents } from "../db/schema";
 import type { ModelGateway } from "../llm/gateway";
 import type { ToolSpec } from "../llm/types";
-import { approveChapter, reopenChapter, retryRun, stepRun, updateStory, writeScriptFromStory } from "../pipeline/runs";
+import { approveChapter, reopenChapter, retryRun, setMaterial, setSheet, sheetKind, stepRun, updateStory, writeScriptFromStory } from "../pipeline/runs";
+import { parseData, type UserData } from "./transcript";
 import { CHAPTERS } from "../stages/chapters";
 import { loadRun, type RunView } from "../ui/runs";
 import { summaryOf, TEST_LABEL } from "../ui/summaries";
@@ -56,7 +57,9 @@ const DOC_LINES = 250;
 export function statusOf(run: RunView) {
   return {
     title: run.title,
-    started_from: run.inputKind,
+    has_material: run.hasMaterial,
+    ...(run.hasMaterial ? {} : { next_step: "No story or screenplay yet. Get one from the user (adopt_material), or shape one with them (write_story)." }),
+    started_from: run.hasMaterial ? run.inputKind : null,
     has_story: !!run.storyText,
     has_screenplay: !!run.scriptText,
     screenplay_source: run.scriptMode === "adapt" ? "written from the story" : run.scriptMode === "own" ? "provided by the user" : null,
@@ -121,6 +124,7 @@ export const TOOLS: AgentTool[] = [
     schema: z.object({}),
     async run(_input, env) {
       const before = await mustLoad(env);
+      if (!before.hasMaterial) return { summary: "No story or screenplay yet", ok: false, output: { error: "This project has no story or screenplay yet. Get one from the user first (adopt_material or write_story)." } };
       const budgetMs = Math.max(20_000, env.deadline - Date.now() - 15_000);
       const o = await stepRun(env.db, env.runId, { gateway: env.gateway, judgeSettings: env.judgeSettings, budgetMs });
       const run = await mustLoad(env);
@@ -179,6 +183,82 @@ export const TOOLS: AgentTool[] = [
       const from = from_line ?? 1;
       const r = numbered(text, from, to_line ?? from + DOC_LINES - 1);
       return { summary: `Read the ${which}, lines ${r.from_line}–${r.to_line} of ${r.total_lines}`, output: r };
+    },
+  }),
+
+  tool({
+    name: "adopt_material",
+    description:
+      "Use what the user sent as the project's material: their latest message (pasted story, logline or screenplay) and any files attached to it, or a file they attached earlier, by name. With as 'auto', text is read as a story or a screenplay (Fountain, Final Draft) automatically, and CSV costume or location sheets are attached as sheets. The first time, this decides where the production starts: a story at chapter I, a screenplay at chapter II. Later, it revises the story or screenplay.",
+    schema: z.object({
+      from: z.string().describe('"latest" for the user\'s most recent message and its files, or the name of a file they attached.'),
+      as: z.enum(["auto", "story", "screenplay", "costume_sheet", "location_sheet"]).describe("How to use it; 'auto' unless the user said otherwise."),
+    }),
+    async run({ from, as }, env) {
+      const rows = await env.db
+        .select()
+        .from(agentEvents)
+        .where(and(eq(agentEvents.runId, env.runId), eq(agentEvents.kind, "user")))
+        .orderBy(desc(agentEvents.id));
+      let texts: { name: string; text: string }[] = [];
+      if (from === "latest" || !from.trim()) {
+        const latest = rows[0];
+        if (!latest) return { summary: "Nothing to use yet", ok: false, output: { error: "The user has not sent anything yet." } };
+        const files = parseData<UserData>(latest).attachments ?? [];
+        texts = files.map((f) => ({ name: f.name, text: f.text }));
+        if (latest.content.trim().split(/\s+/).length >= 3 && !files.some((f) => !/\.csv$/i.test(f.name))) texts.unshift({ name: "chat message", text: latest.content });
+      } else {
+        for (const r of rows) {
+          const f = (parseData<UserData>(r).attachments ?? []).find((a) => a.name.toLowerCase() === from.trim().toLowerCase());
+          if (f) {
+            texts = [{ name: f.name, text: f.text }];
+            break;
+          }
+        }
+        if (!texts.length) return { summary: `No file named ${from}`, ok: false, output: { error: `No attached file is named "${from}".` } };
+      }
+      if (!texts.length) return { summary: "Nothing to use in that message", ok: false, output: { error: "The latest message has no text or files to use. Ask the user for their story or screenplay." } };
+
+      const done: string[] = [];
+      const results: Record<string, unknown>[] = [];
+      let main = false;
+      for (const t of texts) {
+        const isCsv = /\.csv$/i.test(t.name);
+        const sheet = as === "costume_sheet" ? "costumes" : as === "location_sheet" ? "locations" : isCsv ? sheetKind(t.name, t.text) : undefined;
+        if (sheet) {
+          await setSheet(env.db, env.runId, sheet, t);
+          done.push(`${sheet === "costumes" ? "costume" : "location"} sheet (${t.name})`);
+          results.push({ file: t.name, used_as: `${sheet} sheet` });
+          continue;
+        }
+        if (isCsv) {
+          results.push({ file: t.name, skipped: "Not recognised as a costume or location sheet." });
+          continue;
+        }
+        if (main) {
+          results.push({ file: t.name, skipped: "Only one story or screenplay is used per call." });
+          continue;
+        }
+        const m = await setMaterial(env.db, env.runId, { text: t.text, sourceName: t.name, as: as === "story" || as === "screenplay" ? as : "auto" });
+        main = true;
+        done.push(`${m.first ? "" : "revised "}${m.kind} (${m.words.toLocaleString()} words${t.name === "chat message" ? "" : `, ${t.name}`})`);
+        results.push({ file: t.name, used_as: m.kind, words: m.words, starts_at: m.first ? (m.kind === "story" ? "chapter I (story)" : "chapter II (screenplay)") : undefined });
+      }
+      if (!done.length) return { summary: "Nothing usable found", ok: false, output: { error: "Nothing in that message could be used.", results } };
+      return { summary: `Using the ${done.join(" and the ")}`, output: { ok: true, results, next: "Call run_current_chapter." } };
+    },
+  }),
+
+  tool({
+    name: "write_story",
+    description:
+      "Save a story you shaped with the user in conversation, as the project's story (chapter I), when they have no written story yet. Write it in plain prose, a few paragraphs, keeping their characters, events and tone. Only call this once the user has agreed to the draft. Use revise_story to change a story the project already has.",
+    schema: z.object({ text: z.string().min(1).describe("The complete story in prose.") }),
+    async run({ text }, env) {
+      const run = await mustLoad(env);
+      if (run.hasMaterial) return { summary: "The project already has its material", ok: false, output: { error: "This project already has a story or screenplay. Use revise_story to change the story." } };
+      const m = await setMaterial(env.db, env.runId, { text, sourceName: "story written with the agent", as: "story" });
+      return { summary: `Saved the story you shaped together (${m.words.toLocaleString()} words)`, output: { ok: true, next: "Call run_current_chapter to test it." } };
     },
   }),
 

@@ -2,6 +2,7 @@ import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { runs, runStages, type RunStage } from "../db/schema";
 import { getStage, STAGES } from "../stages";
+import { hasMaterial } from "../pipeline/runs";
 import { CHAPTERS, runnableStages, type Chapter, type ChapterState } from "../stages/chapters";
 
 export interface StageView {
@@ -41,9 +42,12 @@ export interface RunView {
   /** Index of the chapter that needs attention now (the first not approved), or the last when greenlit. */
   currentChapter: number;
   greenlit: boolean;
+  /** False until the project has its story or screenplay (chat-first projects start without one). */
+  hasMaterial: boolean;
 }
 
-export function chapterState(i: number, approvedThrough: number, storyText: string | null, stages: StageView[]): { state: ChapterState; note: string | null } {
+export function chapterState(i: number, approvedThrough: number, storyText: string | null, stages: StageView[], material = true): { state: ChapterState; note: string | null } {
+  if (!material) return i === 0 ? { state: "awaiting_input", note: "Waiting for your story or screenplay." } : { state: "locked", note: null };
   if (i === 0 && !storyText) return { state: "skipped", note: "Started from a screenplay." };
   if (i <= approvedThrough) return { state: "approved", note: null };
   if (i > approvedThrough + 1) return { state: "locked", note: null };
@@ -111,9 +115,10 @@ export async function loadRun(db: Db, id: number): Promise<RunView | undefined> 
   const missing = runnableStages(run.approvedThrough).some((s) => !rows.some((r) => r.stage === s));
   const status = run.status === "done" && missing ? "running" : run.status;
 
+  const material = hasMaterial(run);
   const chapters: ChapterView[] = CHAPTERS.map((c, i) => {
     const stageViews = c.stages.map((st) => stages.find((s) => s.id === st)).filter((s): s is StageView => !!s);
-    return { ...c, index: i, stageViews, ...chapterState(i, run.approvedThrough, run.storyText, stageViews) };
+    return { ...c, index: i, stageViews, ...chapterState(i, run.approvedThrough, run.storyText, stageViews, material) };
   });
   const greenlit = run.approvedThrough >= CHAPTERS.length - 1;
   return {
@@ -133,6 +138,7 @@ export async function loadRun(db: Db, id: number): Promise<RunView | undefined> 
     chapters,
     currentChapter: greenlit ? CHAPTERS.length - 1 : Math.max(0, run.approvedThrough + 1),
     greenlit,
+    hasMaterial: material,
   };
 }
 

@@ -54,13 +54,26 @@ export function AgentDriver({ runId, active }: { runId: number; active: boolean 
   ) : null;
 }
 
-/** Open at the newest timeline item, and keep it in view as the agent works unless the user has scrolled up. */
+/**
+ * Chat scrolling: open at the newest message, and keep following new ones
+ * as the agent works, unless the person has scrolled up to read.
+ */
 export function StickToBottom({ count }: { count: number }) {
-  const first = useRef(true);
+  const pinned = useRef(true);
   useEffect(() => {
-    const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
-    if (first.current || nearBottom) document.getElementById("timeline-end")?.scrollIntoView({ block: "end" });
-    first.current = false;
+    // Pinned while the end of the conversation is on screen (on phones the reports sit below it).
+    const onScroll = () => {
+      const end = document.getElementById("timeline-end");
+      pinned.current = !end || end.getBoundingClientRect().top <= window.innerHeight + 160;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => {
+    if (!pinned.current) return;
+    // After layout, so streamed-in content is measured.
+    const id = requestAnimationFrame(() => document.getElementById("timeline-end")?.scrollIntoView({ block: "end" }));
+    return () => cancelAnimationFrame(id);
   }, [count]);
-  return <span id="timeline-end" aria-hidden />;
+  return <span id="timeline-end" aria-hidden className="block scroll-mb-40" />;
 }

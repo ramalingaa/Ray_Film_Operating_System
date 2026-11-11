@@ -252,3 +252,74 @@ describe("the background queue", () => {
     expect(workerEnabled({ AGENT_WORKER_ENABLED: "1" })).toBe(true);
   });
 });
+
+describe("chat-first projects", () => {
+  const costumes = fs.readFileSync("data/costumes.csv", "utf8");
+  const locations = fs.readFileSync("data/locations.csv", "utf8");
+
+  it("start with only a name, greet the user, and wait; no stage can run yet", async () => {
+    const { createProject } = await import("@/lib/pipeline/runs");
+    const { welcomeProject } = await import("@/lib/agent/loop");
+    const db = await openDb(":memory:");
+    const id = await createProject(db, "Harbour Lights");
+    await welcomeProject(db, id, "Harbour Lights");
+    expect(await agentStatus(db, id)).toBe("waiting");
+    const run = (await loadRun(db, id))!;
+    expect(run.hasMaterial).toBe(false);
+    expect(run.chapters[0].state).toBe("awaiting_input");
+    expect(run.chapters[1].state).toBe("locked");
+    const env = { db, runId: id, judgeSettings, deadline: Date.now() + 60_000 };
+    expect(await runTool("run_current_chapter", {}, env)).toMatchObject({ ok: false, output: { error: expect.stringContaining("no story or screenplay") } });
+    expect((await events(db, id))[0]).toMatchObject({ kind: "assistant", content: expect.stringContaining("Welcome to Harbour Lights") });
+  });
+
+  it("the scripted agent asks for more when the first message is too short, then adopts attached files and finishes", async () => {
+    const { createProject } = await import("@/lib/pipeline/runs");
+    const { welcomeProject } = await import("@/lib/agent/loop");
+    const db = await openDb(":memory:");
+    const id = await createProject(db, "The Keeper's Ledger");
+    await welcomeProject(db, id, "The Keeper's Ledger");
+
+    await sendToAgent(db, id, "a heist on a ferry");
+    expect(await agentTurn(db, id, { judgeSettings })).toEqual({ state: "waiting" });
+    expect((await events(db, id)).at(-1)).toMatchObject({ kind: "tool", tool: "ask_user" });
+
+    await sendToAgent(db, id, "Here it is, with the sheets.", [
+      { name: "script.fountain", text: script },
+      { name: "costumes.csv", text: costumes },
+      { name: "locations.csv", text: locations },
+    ]);
+    expect(await agentToEnd(db, id, { stageGateway: stageGateway(), judgeSettings })).toEqual({ state: "done" });
+    const [row] = await db.select().from(runs).where(eq(runs.id, id));
+    expect(row).toMatchObject({ inputKind: "screenplay", costumesName: "costumes.csv", locationsName: "locations.csv", approvedThrough: 5 });
+    const adopt = (await events(db, id)).find((e) => e.kind === "tool" && e.tool === "adopt_material")!;
+    expect(adopt.content).toMatch(/screenplay .*costume sheet .*location sheet/);
+  });
+
+  it("adopt_material takes a pasted story from the latest message, and write_story refuses once there is material", async () => {
+    const { createProject } = await import("@/lib/pipeline/runs");
+    const db = await openDb(":memory:");
+    const id = await createProject(db, "Rain");
+    const env = { db, runId: id, judgeSettings, deadline: Date.now() + 60_000 };
+    const story = "Maya waits on the rainy pier at night for her brother Daniel, who promised to bring the brass key. When he finally arrives, he is not alone: Voss, the harbour master, is with him, and he lies about the ledger.";
+    await sendToAgent(db, id, story);
+    expect(await runTool("adopt_material", { from: "latest", as: "auto" }, env)).toMatchObject({ ok: true, summary: expect.stringContaining("story") });
+    const run = (await loadRun(db, id))!;
+    expect(run).toMatchObject({ hasMaterial: true, inputKind: "story", storyText: story, currentChapter: 0 });
+    expect(await runTool("write_story", { text: "Another story." }, env)).toMatchObject({ ok: false });
+    expect(await runTool("adopt_material", { from: "missing.txt", as: "auto" }, env)).toMatchObject({ ok: false, output: { error: expect.stringContaining("missing.txt") } });
+  });
+
+  it("refuses files that are not text, and shows the model each attachment's opening", async () => {
+    const { createProject } = await import("@/lib/pipeline/runs");
+    const { userMessageText } = await import("@/lib/agent/transcript");
+    const db = await openDb(":memory:");
+    const id = await createProject(db, "Docs");
+    await expect(sendToAgent(db, id, "", [{ name: "script.pdf", text: "%PDF" }])).rejects.toThrow(/text files only/);
+    await sendToAgent(db, id, "Here", [{ name: "script.fountain", text: script }]);
+    const last = (await events(db, id)).at(-1)!;
+    const text = userMessageText(last);
+    expect(text).toContain("[Attached file: script.fountain");
+    expect(text).toContain("words in all");
+  });
+});
