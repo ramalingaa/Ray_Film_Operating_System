@@ -60,9 +60,11 @@ Set these environment variables in the Vercel project:
 | `CRON_SECRET`, `AGENT_WORKER_ENABLED` | only when you activate the background agent worker (see below) |
 | `MODEL_EXTRACT`, `MODEL_JUDGE`, `JUDGE_POLICY`, `MODEL_AGENT` | optional; without them an OpenRouter key routes every role to the free-first default (set `MODEL_AGENT` to a model that supports tool calling) |
 
-Run `npm run db:migrate` once from your machine (with the same `DATABASE_URL`)
-before the first deploy and after any schema change. Functions run in `sin1`
-to sit next to the database.
+Every Vercel build migrates the database first (the `vercel-build` script runs
+`scripts/migrate.ts --deploy`, then `next build`), so the schema always matches
+the code. A failed migration fails the build. Preview builds migrate the
+database their `DATABASE_URL` points at too. Functions run in `sin1` to sit
+next to the database.
 
 The background agent worker (`/api/cron/agent`) is **asleep**: agents work
 while their project page is open. To activate it, set

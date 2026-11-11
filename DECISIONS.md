@@ -354,3 +354,10 @@ Assumptions made where the spec was ambiguous. Newest at the bottom.
 89. **The product is named Ray Studio** (owner's choice), replacing the
     working name ReelGraph in the UI, page titles, agent prompt and docs. The
     repository keeps its name; sample scripts keep their placeholder credits.
+90. **Every Vercel build applies database migrations before compiling**
+    (owner's choice), via the `vercel-build` script. A deploy once shipped
+    code that read new columns before anyone had migrated Supabase, and every
+    workspace page failed. Builds without DATABASE_URL skip the step; a failed
+    migration fails the build. Migrations are additive, so a preview build
+    migrating a shared database is safe for the running production code.
+
