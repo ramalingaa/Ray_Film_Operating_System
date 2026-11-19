@@ -131,3 +131,7 @@ Providers: `anthropic`, `openai`, `gemini`, `openrouter`, `groq`, `together`,
 `deepseek`, `mistral`, `fireworks`, `xai`, and local `ollama`, `lmstudio`,
 `vllm`. Extra models in a list are fallbacks for extraction, and co-judges for
 judging (`primary`, `majority` or `unanimous`).
+
+## Licence
+
+Ray Studio is released under the [MIT License](LICENSE).
